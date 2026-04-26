@@ -1,74 +1,50 @@
-# 中文注释副本；原始文件：gym_art/quadrotor_multi/scenarios/run_away.py
-# 说明：为避免修改源码，本文件仅作为阅读辅助材料。
-
-# 导入当前模块依赖。
 import numpy as np
 
-# 导入当前模块依赖。
 from gym_art.quadrotor_multi.scenarios.base import QuadrotorScenario
 
+# 这是一个带局部追逃味道的场景变体。
+# reset 时先像普通不同目标任务一样生成整组 goals；step 中再周期性改写前两架无人机的目标，
+# 让它们去追逐其余 agent 当前占据的目标点，从而制造局部“逃逸/追逐”扰动。
 
-# 定义类 `Scenario_run_away`。
+
 class Scenario_run_away(QuadrotorScenario):
-    # 定义函数 `__init__`。
     def __init__(self, quads_mode, envs, num_agents, room_dims):
-        # 调用 `super` 执行当前处理。
         super().__init__(quads_mode, envs, num_agents, room_dims)
 
-    # 定义函数 `update_goals`。
     def update_goals(self):
-        # 保存或更新 `goals` 的值。
+        # 当外部通过可视化或交互接口改变 formation_size 时，需要先重建整组基准 goals，
+        # 然后再由 step 的局部追逃逻辑继续覆盖前两架无人机的目标。
         self.goals = self.generate_goals(self.num_agents, self.formation_center, layer_dist=self.layer_dist)
-        # 遍历当前序列或迭代器，逐项执行下面的逻辑。
         for env, goal in zip(self.envs, self.goals):
-            # 保存或更新 `env.goal` 的值。
             env.goal = goal
 
-    # 定义函数 `step`。
     def step(self):
-        # 保存或更新 `tick` 的值。
         tick = self.envs[0].tick
-        # 保存或更新 `control_step_for_sec` 的值。
+        # 这个场景按 1 秒粒度注入一次追逃扰动，节奏比换整组场景更快。
         control_step_for_sec = int(1.0 * self.envs[0].control_freq)
 
-        # 根据条件决定是否进入当前分支。
         if tick % control_step_for_sec == 0 and tick > 0:
-            # 保存或更新 `g_index` 的值。
+            # 按当前实现，只改写前两架无人机的目标，并且它们只能从其余 agent 的目标里抽样。
+            # 结果是大部分队形保持原位，局部出现更强的交叉追逐和碰撞压力。
             g_index = np.random.randint(low=1, high=self.num_agents, size=2)
-            # 保存或更新 `goals[0]` 的值。
             self.goals[0] = self.goals[g_index[0]]
-            # 保存或更新 `goals[1]` 的值。
             self.goals[1] = self.goals[g_index[1]]
-            # 保存或更新 `envs[0].goal` 的值。
             self.envs[0].goal = self.goals[0]
-            # 保存或更新 `envs[1].goal` 的值。
             self.envs[1].goal = self.goals[1]
 
-        # 返回当前函数的结果。
         return
 
-    # 定义函数 `reset`。
     def reset(self):
-        # Reset formation and related parameters
-        # 调用 `update_formation_and_relate_param` 执行当前处理。
+        # reset 仍沿用“先抽编队参数、再生成一组完整 goals”的主线，只是没有调用 `standard_reset` 封装。
         self.update_formation_and_relate_param()
-        # Reset formation center
-        # 保存或更新 `formation_center` 的值。
         self.formation_center = np.array([0.0, 0.0, 2.0])
 
-        # Regenerate goals, we don't have to assign goals to the envs,
-        # the reset function in quadrotor_multi.py would do that
-        # 保存或更新 `goals` 的值。
+        # 这里只准备初始 goal 集合；真正把第 i 个 goal 写入第 i 个子环境，是外层多机环境 reset 的职责。
         self.goals = self.generate_goals(num_agents=self.num_agents, formation_center=self.formation_center,
                                          layer_dist=self.layer_dist)
-        # 调用 `shuffle` 执行当前处理。
         np.random.shuffle(self.goals)
 
-    # 定义函数 `update_formation_size`。
     def update_formation_size(self, new_formation_size):
-        # 根据条件决定是否进入当前分支。
         if new_formation_size != self.formation_size:
-            # 保存或更新 `formation_size` 的值。
             self.formation_size = new_formation_size if new_formation_size > 0.0 else 0.0
-            # 调用 `update_goals` 执行当前处理。
             self.update_goals()

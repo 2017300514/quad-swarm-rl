@@ -1,18 +1,18 @@
 # 中文注释副本；原始文件：swarm_rl/runs/obstacles/pbt_quads_multi_obstacles.py
 # 说明：为避免修改源码，本文件仅作为阅读辅助材料。
+# 该文件属于障碍场景实验配置，主要作用是把一组训练超参数打包成可复现实验入口。
+# 这些配置本身不执行仿真，但会控制环境难度、观测结构、回放概率和模型结构选择。
 
-# 导入当前模块依赖。
+# 下面这组导入把当前模块会消费的环境组件、训练接口或数值工具集中拉进来；真正重要的是后续它们怎样参与数据流。
 from sample_factory.launcher.run_description import Experiment, ParamGrid, RunDescription
 from swarm_rl.runs.obstacles.quad_obstacle_baseline import QUAD_BASELINE_CLI_8
 
-# 保存或更新 `_params` 的值。
 _params = ParamGrid(
     [
         ("with_pbt", ["True"]),
     ]
 )
 
-# 保存或更新 `OBSTACLE_MODEL_CLI` 的值。
 OBSTACLE_MODEL_CLI = QUAD_BASELINE_CLI_8 + (
     # PBT
     ' --num_policies=8 --pbt_mix_policies_in_one_env=True --pbt_period_env_steps=10000000 '
@@ -30,12 +30,10 @@ OBSTACLE_MODEL_CLI = QUAD_BASELINE_CLI_8 + (
     '--wandb_group=pbt_obstacle_multi_attn_v2'
 )
 
-# 保存或更新 `_experiment` 的值。
 _experiment = Experiment(
     "pbt_obstacle_multi_attn_v2",
     OBSTACLE_MODEL_CLI,
     _params.generate_params(randomize=False),
 )
 
-# 保存或更新 `RUN_DESCRIPTION` 的值。
 RUN_DESCRIPTION = RunDescription("obstacles_multi", experiments=[_experiment])

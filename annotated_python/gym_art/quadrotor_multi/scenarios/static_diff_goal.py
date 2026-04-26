@@ -1,13 +1,11 @@
-# 中文注释副本；原始文件：gym_art/quadrotor_multi/scenarios/static_diff_goal.py
-# 说明：为避免修改源码，本文件仅作为阅读辅助材料。
-
-# 导入当前模块依赖。
 from gym_art.quadrotor_multi.scenarios.base import QuadrotorScenario
 
+# 这是最简单的“不同目标静态基线”。
+# 它和 `static_same_goal` 的差别不在是否移动目标，而在 reset 时就把每架无人机分配到不同的编队槽位，
+# 因此该场景常作为后续 `dynamic_diff_goal`、`swap_goals` 这类复杂重分配任务的静态对照组。
 
-# 定义类 `Scenario_static_diff_goal`。
+
 class Scenario_static_diff_goal(QuadrotorScenario):
-    # 定义函数 `step`。
     def step(self):
-        # 返回当前函数的结果。
+        # 场景层不再改写 goals；外层环境只基于 reset 时那组固定分配去推进动力学、奖励和成功率统计。
         return

@@ -1,23 +1,20 @@
 # 中文注释副本；原始文件：setup.py
 # 说明：为避免修改源码，本文件仅作为阅读辅助材料。
+# 该文件是项目代码库的一部分，当前副本的注释重点放在它在整体训练/仿真链路中的职责，而不是 Python 语法本身。
 
-# 导入当前模块依赖。
+# 下面这组导入把当前模块会消费的环境组件、训练接口或数值工具集中拉进来；真正重要的是后续它们怎样参与数据流。
 from setuptools import setup, find_packages
 from os import path
 
-# 保存或更新 `here` 的值。
 here = path.abspath(path.dirname(__file__))
 
 # Get the long description from the README file
-# 使用上下文管理器包裹后续资源操作。
 with open(path.join(here, 'README.md'), encoding='utf-8') as f:
-    # 保存或更新 `long_description` 的值。
     long_description = f.read()
 
 # Arguments marked as "Required" below must be included for upload to PyPI.
 # Fields marked as "Optional" may be commented out.
 
-# 保存或更新 `pip_packages` 的值。
 pip_packages = [
     'numpy==1.26.4', 'matplotlib==3.9.2', 'numba==0.60.0', 'pyglet==1.5.23', 'gym==0.26.2', 'gymnasium==0.28.1',
     'transforms3d==0.4.2', 'noise==1.2.2', 'tqdm==4.66.5', 'Cython==3.0.11', 'scipy==1.14.1',
@@ -25,7 +22,6 @@ pip_packages = [
     'bezier==2023.7.28', 'typeguard==4.3.0', 'osqp==0.6.7.post3'
 ]
 
-# 调用 `setup` 执行当前处理。
 setup(
     name='swarm_rl',  # Required
 

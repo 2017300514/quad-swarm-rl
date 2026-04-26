@@ -1,7 +1,8 @@
 # 中文注释副本；原始文件：swarm_rl/runs/obstacles/quad_obstacle_baseline.py
 # 说明：为避免修改源码，本文件仅作为阅读辅助材料。
+# 该文件属于障碍场景实验配置，主要作用是把一组训练超参数打包成可复现实验入口。
+# 这些配置本身不执行仿真，但会控制环境难度、观测结构、回放概率和模型结构选择。
 
-# 保存或更新 `QUAD_BASELINE_CLI_8` 的值。
 QUAD_BASELINE_CLI_8 = (
     'python -m swarm_rl.train --env=quadrotor_multi --train_for_env_steps=1000000000 --algo=APPO --use_rnn=False '
     '--num_workers=36 --num_envs_per_worker=4 --learning_rate=0.0001 --ppo_clip_value=5.0 --recurrence=1 '

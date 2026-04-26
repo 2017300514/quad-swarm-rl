@@ -1,11 +1,12 @@
 # 中文注释副本；原始文件：swarm_rl/runs/obstacles/quads_multi_obstacles_nei_encoder_search.py
 # 说明：为避免修改源码，本文件仅作为阅读辅助材料。
+# 该文件属于障碍场景实验配置，主要作用是把一组训练超参数打包成可复现实验入口。
+# 这些配置本身不执行仿真，但会控制环境难度、观测结构、回放概率和模型结构选择。
 
-# 导入当前模块依赖。
+# 下面这组导入把当前模块会消费的环境组件、训练接口或数值工具集中拉进来；真正重要的是后续它们怎样参与数据流。
 from sample_factory.launcher.run_description import Experiment, ParamGrid, RunDescription
 from swarm_rl.runs.obstacles.quad_obstacle_baseline import QUAD_BASELINE_CLI_8
 
-# 保存或更新 `_params` 的值。
 _params = ParamGrid(
     [
         ("seed", [0000, 3333]),
@@ -14,7 +15,6 @@ _params = ParamGrid(
     ]
 )
 
-# 保存或更新 `OBSTACLE_MODEL_CLI` 的值。
 OBSTACLE_MODEL_CLI = QUAD_BASELINE_CLI_8 + (
     ' --num_workers=36 --num_envs_per_worker=4 --quads_num_agents=8 '
     '--quads_neighbor_obs_type=pos_vel --quads_encoder_type=attention '
@@ -22,12 +22,10 @@ OBSTACLE_MODEL_CLI = QUAD_BASELINE_CLI_8 + (
     '--wandb_group=test_neighbor_encoder'
 )
 
-# 保存或更新 `_experiment` 的值。
 _experiment = Experiment(
     "test_neighbor_encoder",
     OBSTACLE_MODEL_CLI,
     _params.generate_params(randomize=False),
 )
 
-# 保存或更新 `RUN_DESCRIPTION` 的值。
 RUN_DESCRIPTION = RunDescription("obstacles_multi", experiments=[_experiment])

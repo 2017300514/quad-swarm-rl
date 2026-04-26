@@ -1,88 +1,63 @@
-# 中文注释副本；原始文件：gym_art/quadrotor_multi/scenarios/ep_rand_bezier.py
-# 说明：为避免修改源码，本文件仅作为阅读辅助材料。
-
-# 导入当前模块依赖。
 import numpy as np
 import bezier
 
-# 导入当前模块依赖。
 from gym_art.quadrotor_multi.scenarios.base import QuadrotorScenario
 
+# 这个场景不再让目标点静止在某个编队槽位，而是让整组目标沿一条随机二阶 Bezier 曲线平滑移动。
+# 与 `dynamic_same_goal` 的跳变式中心切换不同，这里目标在 5 秒时间窗内连续漂移，
+# 因而策略看到的是“共享移动参考轨迹”，更接近追踪一个持续运动的逃逸目标。
 
-# 定义类 `Scenario_ep_rand_bezier`。
+
 class Scenario_ep_rand_bezier(QuadrotorScenario):
-    # 定义函数 `step`。
     def step(self):
-        # randomly sample new goal pos in free space and have the goal move there following a bezier curve
-        # 保存或更新 `tick` 的值。
+        # 每隔固定 5 秒重采一条新轨迹；这条轨迹的起点是当前目标位置，终点和控制点在房间自由空间内随机采样。
         tick = self.envs[0].tick
-        # 保存或更新 `control_freq` 的值。
         control_freq = self.envs[0].control_freq
-        # 保存或更新 `num_secs` 的值。
         num_secs = 5
-        # 保存或更新 `control_steps` 的值。
         control_steps = int(num_secs * control_freq)
-        # 保存或更新 `t` 的值。
         t = tick % control_steps
-        # 保存或更新 `room_dims` 的值。
+
+        # `room_dims - formation_size` 给轨迹采样留出编队半径余量，避免目标中心合法但整组编队越界。
         room_dims = np.array(self.room_dims) - self.formation_size
-        # min and max distance the goal can spawn away from its current location. 30 = empirical upper bound on
-        # velocity that the drones can handle.
-        # 保存或更新 `max_dist` 的值。
+        # 新目标不能离当前目标太近，否则轨迹几乎不动；也不能太远，否则移动速度会超过无人机能稳定跟踪的范围。
         max_dist = min(30, max(room_dims))
-        # 保存或更新 `min_dist` 的值。
         min_dist = max_dist / 2
-        # 根据条件决定是否进入当前分支。
         if tick % control_steps == 0 or tick == 1:
-            # sample a new goal pos that's within the room boundaries and satisfies the distance constraint
-            # 保存或更新 `new_goal_found` 的值。
+            # 循环采样直到找到一条完全落在房间内部的 Bezier 控制点组合。
             new_goal_found = False
-            # 在条件成立时持续执行下面的循环体。
             while not new_goal_found:
-                # 同时更新 `low`, `high` 等变量。
                 low, high = np.array([-room_dims[0] / 2, -room_dims[1] / 2, 0]), np.array(
                     [room_dims[0] / 2, room_dims[1] / 2, room_dims[2]])
-                # need an intermediate point for a deg=2 curve
-                # 保存或更新 `new_pos` 的值。
+
+                # 二阶 Bezier 需要两个未来控制点；源码直接在三维空间采样两个方向向量。
                 new_pos = np.random.uniform(low=-high, high=high, size=(2, 3)).reshape(3, 2)
-                # add some velocity randomization = random magnitude * unit direction
-                # 保存或更新 `new_pos` 的值。
+
+                # 把随机方向归一化后再乘随机长度，相当于给轨迹段加入速度尺度扰动。
                 new_pos = new_pos * np.random.randint(min_dist, max_dist + 1) / np.linalg.norm(new_pos, axis=0)
-                # 保存或更新 `new_pos` 的值。
                 new_pos = self.goals[0].reshape(3, 1) + new_pos
-                # 保存或更新 `lower_bound` 的值。
                 lower_bound = np.expand_dims(low, axis=1)
-                # 保存或更新 `upper_bound` 的值。
                 upper_bound = np.expand_dims(high, axis=1)
-                # 保存或更新 `new_goal_found` 的值。
                 new_goal_found = (new_pos > lower_bound + 0.5).all() and (
-                        new_pos < upper_bound - 0.5).all()  # check bounds that are slightly smaller than the room dims
-            # 保存或更新 `nodes` 的值。
+                        new_pos < upper_bound - 0.5).all()
+
+            # 轨迹节点由“当前位置 + 两个未来控制点”组成，之后预采样成整个时间窗内的离散目标序列。
             nodes = np.concatenate((self.goals[0].reshape(3, 1), new_pos), axis=1)
-            # 保存或更新 `nodes` 的值。
             nodes = np.asfortranarray(nodes)
-            # 保存或更新 `pts` 的值。
             pts = np.linspace(0, 1, control_steps)
-            # 保存或更新 `curve` 的值。
             curve = bezier.Curve(nodes, degree=2)
-            # 保存或更新 `interp` 的值。
             self.interp = curve.evaluate_multi(pts)
-            # self.interp = np.clip(self.interp, a_min=np.array([0,0,0.2]).reshape(3,1), a_max=high.reshape(3,
-            # 1)) # want goal clipping to be slightly above the floor
-        # 根据条件决定是否进入当前分支。
+
         if tick % control_steps != 0 and tick > 1:
-            # 保存或更新 `goals` 的值。
+            # 当前实现让所有 agent 共用同一个瞬时目标点。
+            # 因此它更像“全队追同一个移动参照物”，而不是每架机各追一条独立曲线。
             self.goals = np.array([self.interp[:, t] for _ in range(self.num_agents)])
 
-            # 遍历当前序列或迭代器，逐项执行下面的逻辑。
             for i, env in enumerate(self.envs):
-                # 保存或更新 `env.goal` 的值。
                 env.goal = self.goals[i]
 
-        # 返回当前函数的结果。
         return
 
-    # 定义函数 `update_formation_size`。
     def update_formation_size(self, new_formation_size):
-        # 当前代码块暂时不执行实际逻辑。
+        # 该场景没有实现运行中重设编队尺寸的逻辑；
+        # 轨迹采样时只读取当前 `formation_size` 作为边界余量。
         pass

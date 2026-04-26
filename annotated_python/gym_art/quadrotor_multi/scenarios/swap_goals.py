@@ -1,55 +1,38 @@
-# 中文注释副本；原始文件：gym_art/quadrotor_multi/scenarios/swap_goals.py
-# 说明：为避免修改源码，本文件仅作为阅读辅助材料。
-
-# 导入当前模块依赖。
 import numpy as np
 
-# 导入当前模块依赖。
 from gym_art.quadrotor_multi.scenarios.base import QuadrotorScenario
 
+# 这个场景保留同一组编队目标点，但会周期性交换“哪架无人机追哪个目标”。
+# 上游由基类 reset 先生成一组固定 goals；下游 `quadrotor_multi.py` 在每步推进后读取这里写回的
+# `env.goal`，从而把任务难点从“跟一个静态目标点”改成“目标集合不变但分配关系突变”。
 
-# 定义类 `Scenario_swap_goals`。
+
 class Scenario_swap_goals(QuadrotorScenario):
-    # 定义函数 `__init__`。
     def __init__(self, quads_mode, envs, num_agents, room_dims):
-        # 调用 `super` 执行当前处理。
         super().__init__(quads_mode, envs, num_agents, room_dims)
-        # teleport every [4.0, 6.0] secs
-        # 保存或更新 `duration_time` 的值。
+        # 把“每隔几秒重新分配一次目标”换算成控制步数；reset 时会再次随机化这个节奏。
         duration_time = 5.0
-        # 保存或更新 `control_step_for_sec` 的值。
         self.control_step_for_sec = int(duration_time * self.envs[0].control_freq)
 
-    # 定义函数 `update_goals`。
     def update_goals(self):
-        # 调用 `shuffle` 执行当前处理。
+        # 与 `dynamic_diff_goal` 不同，这里不重采新的几何中心或编队形状，只在现有 goal 集合内部洗牌。
+        # 这样场景难点集中在“agent-goal 映射突变”，而不是空间布局整体改变。
         np.random.shuffle(self.goals)
-        # 遍历当前序列或迭代器，逐项执行下面的逻辑。
         for env, goal in zip(self.envs, self.goals):
-            # 保存或更新 `env.goal` 的值。
             env.goal = goal
 
-    # 定义函数 `step`。
     def step(self):
-        # 保存或更新 `tick` 的值。
         tick = self.envs[0].tick
-        # Switch every [4, 6] seconds
-        # 根据条件决定是否进入当前分支。
+        # 每到切换时刻，就把新映射同步回各子环境；下一步 reward 和 distance-to-goal 都会基于新目标结算。
         if tick % self.control_step_for_sec == 0 and tick > 0:
-            # 调用 `update_goals` 执行当前处理。
             self.update_goals()
 
-        # 返回当前函数的结果。
         return
 
-    # 定义函数 `reset`。
     def reset(self):
-        # Update duration time
-        # 保存或更新 `duration_time` 的值。
+        # 每个 episode 随机换目标节奏，避免策略只适应固定的交换频率。
         duration_time = np.random.uniform(low=4.0, high=6.0)
-        # 保存或更新 `control_step_for_sec` 的值。
         self.control_step_for_sec = int(duration_time * self.envs[0].control_freq)
 
-        # Reset formation, and parameters related to the formation; formation center; goals
-        # 调用 `standard_reset` 执行当前处理。
+        # 初始 goal 集合仍复用基类标准流程：抽编队、定中心、生成并打乱一组目标点。
         self.standard_reset()

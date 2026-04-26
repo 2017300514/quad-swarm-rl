@@ -1,104 +1,76 @@
 # 中文注释副本；原始文件：gym_art/quadrotor_multi/collisions/test/unit_test/quadrotor.py
 # 说明：为避免修改源码，本文件仅作为阅读辅助材料。
+# 该文件处理机体、障碍物或房间边界的碰撞几何与碰撞后状态更新，是训练中安全相关奖励和终止判定的重要来源。
+# 这里的输出会回流到动力学状态、奖励项和碰撞统计中。
 
-# 导入当前模块依赖。
+# 下面这组导入把当前模块会消费的环境组件、训练接口或数值工具集中拉进来；真正重要的是后续它们怎样参与数据流。
 import numpy as np
 
-# 导入当前模块依赖。
+# 下面这组导入把当前模块会消费的环境组件、训练接口或数值工具集中拉进来；真正重要的是后续它们怎样参与数据流。
 from gym_art.quadrotor_multi.collisions.quadrotors import calculate_collision_matrix
 
 
-# 定义函数 `test_calculate_collision_matrix`。
+# `test_calculate_collision_matrix` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
 def test_calculate_collision_matrix():
-    # 保存或更新 `positions` 的值。
     positions = np.ones((8, 3))
-    # 保存或更新 `positions[7][0]` 的值。
     positions[7][0] = 3
-    # 保存或更新 `positions[7][1]` 的值。
     positions[7][1] = 3
-    # 保存或更新 `positions[7][2]` 的值。
     positions[7][2] = 6
-    # 保存或更新 `collision_threshold` 的值。
+    # 实际碰撞阈值不是裸半径，而是按机臂长度缩放得到，确保不同尺寸动力学参数下碰撞判定仍有物理一致性。
     collision_threshold = 0.2
-    # 保存或更新 `num_agents` 的值。
+    # 该值来自实验配置，决定环境一次并行维护多少架无人机；后续会影响观测拼接尺寸、邻居筛选范围和碰撞矩阵规模。
     num_agents = 8
 
-    # 保存或更新 `item_num` 的值。
     item_num = int(num_agents * (num_agents - 1) / 2)
-    # 同时更新 `test_drone_col_matrix`, `test_curr_drone_collisions`, `test_distance_matrix` 等变量。
     test_drone_col_matrix, test_curr_drone_collisions, test_distance_matrix = \
-        # 保存或更新 `calculate_collision_matrix(positions` 的值。
         calculate_collision_matrix(positions=positions, collision_threshold=collision_threshold)
 
-    # 保存或更新 `true_drone_col_matrix` 的值。
     true_drone_col_matrix = -1000 * np.ones(len(positions))
-    # 保存或更新 `true_curr_drone_collisions` 的值。
     true_curr_drone_collisions = -1000 * np.ones((item_num, 2))
-    # 保存或更新 `true_distance_matrix` 的值。
     true_distance_matrix = -1000 * np.ones((item_num, 3))
-    # 保存或更新 `count` 的值。
     count = 0
-    # 遍历当前序列或迭代器，逐项执行下面的逻辑。
     for i in range(len(positions)):
-        # 遍历当前序列或迭代器，逐项执行下面的逻辑。
         for j in range(i + 1, len(positions)):
-            # 保存或更新 `true_distance_matrix[count]` 的值。
             true_distance_matrix[count] = [i, j, np.linalg.norm(positions[i] - positions[j])]
-            # 根据条件决定是否进入当前分支。
             if np.linalg.norm(positions[i] - positions[j]) <= collision_threshold:
-                # 保存或更新 `true_drone_col_matrix[i]` 的值。
                 true_drone_col_matrix[i] = 1
-                # 保存或更新 `true_drone_col_matrix[j]` 的值。
                 true_drone_col_matrix[j] = 1
-                # 保存或更新 `true_curr_drone_collisions[count]` 的值。
                 true_curr_drone_collisions[count] = [i, j]
-            # 保存或更新 `count` 的值。
             count += 1
 
-    # 保存或更新 `test_curr_drone_collisions` 的值。
     test_curr_drone_collisions = test_curr_drone_collisions.astype(int)
-    # 保存或更新 `test_curr_drone_collisions` 的值。
     test_curr_drone_collisions = np.delete(test_curr_drone_collisions, np.unique(
         np.where(test_curr_drone_collisions == [-1000, -1000])[0]), axis=0)
 
-    # 保存或更新 `true_curr_drone_collisions` 的值。
     true_curr_drone_collisions = true_curr_drone_collisions.astype(int)
-    # 保存或更新 `true_curr_drone_collisions` 的值。
     true_curr_drone_collisions = np.delete(true_curr_drone_collisions, np.unique(
         np.where(true_curr_drone_collisions == [-1000, -1000])[0]), axis=0)
 
-    # 断言当前条件成立，用于保护运行假设。
+    # 这里不是业务逻辑本身，而是在守护运行假设，避免非法配置或异常状态把后续训练流程带偏。
     assert test_drone_col_matrix.all() == true_drone_col_matrix.all()
 
-    # 遍历当前序列或迭代器，逐项执行下面的逻辑。
     for i in range(len(test_curr_drone_collisions)):
-        # 根据条件决定是否进入当前分支。
         if test_curr_drone_collisions[i] not in true_curr_drone_collisions:
-            # 主动抛出异常以中止或提示错误。
             raise ValueError
 
-    # 断言当前条件成立，用于保护运行假设。
+    # 这里不是业务逻辑本身，而是在守护运行假设，避免非法配置或异常状态把后续训练流程带偏。
     assert test_distance_matrix.all() == true_distance_matrix.all()
 
     # print('drone_col_matrix:    ', drone_col_matrix)
     # print('curr_drone_collisions:    ', curr_drone_collisions)
     # print('distance_matrix:    ', distance_matrix)
 
-    # 返回当前函数的结果。
+    # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
     return
 
 
-# 定义函数 `unit_test`。
+# `unit_test` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
 def unit_test():
-    # 调用 `test_calculate_collision_matrix` 执行当前处理。
     test_calculate_collision_matrix()
-    # 调用 `print` 执行当前处理。
     print('Pass unit test!')
-    # 返回当前函数的结果。
+    # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
     return
 
 
-# 根据条件决定是否进入当前分支。
 if __name__ == "__main__":
-    # 调用 `unit_test` 执行当前处理。
     unit_test()

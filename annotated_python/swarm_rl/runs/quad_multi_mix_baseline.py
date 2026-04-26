@@ -1,15 +1,15 @@
 # 中文注释副本；原始文件：swarm_rl/runs/quad_multi_mix_baseline.py
 # 说明：为避免修改源码，本文件仅作为阅读辅助材料。
+# 该文件属于强化学习训练侧逻辑，负责把环境、模型、配置或评估流程接到 Sample Factory 框架上。
+# 这里产生的数据通常会继续流向训练循环、策略网络或实验分析脚本。
 
-# 导入当前模块依赖。
+# 下面这组导入把当前模块会消费的环境组件、训练接口或数值工具集中拉进来；真正重要的是后续它们怎样参与数据流。
 from sample_factory.launcher.run_description import RunDescription, Experiment, ParamGrid
 
-# 保存或更新 `_params` 的值。
 _params = ParamGrid([
     ('quads_collision_reward', [5.0]),
 ])
 
-# 保存或更新 `QUAD_BASELINE_CLI_8` 的值。
 QUAD_BASELINE_CLI_8 = (
     'python -m swarm_rl.train --env=quadrotor_multi --train_for_env_steps=1000000000 --algo=APPO --use_rnn=False '
     '--num_workers=36 --num_envs_per_worker=4 --learning_rate=0.0001 --ppo_clip_value=5.0 --recurrence=1 '
@@ -24,12 +24,10 @@ QUAD_BASELINE_CLI_8 = (
     '--normalize_returns=False --reward_clip=10.0 --save_milestones_sec=3600'
 )
 
-# 保存或更新 `_experiment` 的值。
 _experiment = Experiment(
     'quad_mix_baseline-8_mixed',
     QUAD_BASELINE_CLI_8,
     _params.generate_params(randomize=False),
 )
 
-# 保存或更新 `RUN_DESCRIPTION` 的值。
 RUN_DESCRIPTION = RunDescription('quads_multi_mix_baseline_8a_local_v116', experiments=[_experiment])

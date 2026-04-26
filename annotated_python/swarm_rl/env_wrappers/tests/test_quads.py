@@ -1,92 +1,70 @@
 # 中文注释副本；原始文件：swarm_rl/env_wrappers/tests/test_quads.py
 # 说明：为避免修改源码，本文件仅作为阅读辅助材料。
+# 该文件属于强化学习训练侧逻辑，负责把环境、模型、配置或评估流程接到 Sample Factory 框架上。
+# 这里产生的数据通常会继续流向训练循环、策略网络或实验分析脚本。
 
-# 导入当前模块依赖。
+# 下面这组导入把当前模块会消费的环境组件、训练接口或数值工具集中拉进来；真正重要的是后续它们怎样参与数据流。
 import unittest
 from unittest import TestCase
 
-# 导入当前模块依赖。
+# 下面这组导入把当前模块会消费的环境组件、训练接口或数值工具集中拉进来；真正重要的是后续它们怎样参与数据流。
 from sample_factory.envs.create_env import create_env
 from sample_factory.utils.timing import Timing
 from sample_factory.utils.utils import log, is_module_available
 
-# 导入当前模块依赖。
+# 下面这组导入把当前模块会消费的环境组件、训练接口或数值工具集中拉进来；真正重要的是后续它们怎样参与数据流。
 from swarm_rl.train import register_swarm_components, parse_swarm_cfg
 
 
-# 定义函数 `numba_available`。
+# `numba_available` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
 def numba_available():
-    # 返回当前函数的结果。
+    # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
     return is_module_available('numba')
 
 
-# 定义函数 `run_multi_quadrotor_env`。
+# `run_multi_quadrotor_env` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
 def run_multi_quadrotor_env(env_name, cfg):
-    # 保存或更新 `env` 的值。
     env = create_env(env_name, cfg=cfg)
-    # 调用 `reset` 执行当前处理。
     env.reset()
-    # 遍历当前序列或迭代器，逐项执行下面的逻辑。
     for i in range(100):
-        # 同时更新 `obs`, `r`, `term`, `trunc` 等变量。
         obs, r, term, trunc, info = env.step([env.action_space.sample() for _ in range(env.num_agents)])
 
-    # 保存或更新 `n_frames` 的值。
     n_frames = 1000
-    # 保存或更新 `env` 的值。
     env = create_env(env_name, cfg=cfg)
-    # 调用 `reset` 执行当前处理。
     env.reset()
 
-    # 保存或更新 `timing` 的值。
     timing = Timing()
-    # 使用上下文管理器包裹后续资源操作。
     with timing.timeit('step'):
-        # 遍历当前序列或迭代器，逐项执行下面的逻辑。
         for i in range(n_frames):
-            # 同时更新 `obs`, `r`, `term`, `trunc` 等变量。
             obs, r, term, trunc, info = env.step([env.action_space.sample() for _ in range(env.num_agents)])
 
-    # 调用 `debug` 执行当前处理。
     log.debug('Time %s, FPS %.1f', timing, n_frames * env.num_agents / timing.step)
-    # 调用 `close` 执行当前处理。
     env.close()
 
 
-# 定义类 `TestQuads`。
+# `TestQuads` 是当前文件暴露的核心类型，它负责维护与该模块职责直接相关的长期状态。
 class TestQuads(TestCase):
-    # 定义函数 `test_quad_multi_env`。
+    # `test_quad_multi_env` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
     def test_quad_multi_env(self):
-        # 调用 `register_swarm_components` 执行当前处理。
         register_swarm_components()
 
-        # 保存或更新 `env_name` 的值。
         env_name = 'quadrotor_multi'
-        # 保存或更新 `experiment_name` 的值。
         experiment_name = 'test_multi'
-        # 保存或更新 `cfg` 的值。
+        # 这里拿到的是训练或评估全流程共享的总配置对象，后续模型注册、环境创建和 PPO 超参数都会从中读取。
         cfg = parse_swarm_cfg(argv=["--algo=APPO", f"--env={env_name}", f"--experiment={experiment_name}"])
-        # 保存或更新 `assertIsNotNone(create_env(env_name, cfg` 的值。
         self.assertIsNotNone(create_env(env_name, cfg=cfg))
-        # 调用 `run_multi_quadrotor_env` 执行当前处理。
         run_multi_quadrotor_env(env_name, cfg)
 
-    # 为下面的函数或方法附加装饰器行为。
+    # 这里通过装饰器把额外框架语义附着到下面的定义上，真正影响的是后续调用方式或注册行为。
     @unittest.skipUnless(numba_available(), 'Numba is not installed')
-    # 定义函数 `test_quad_multi_env_with_numba`。
+    # `test_quad_multi_env_with_numba` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
     def test_quad_multi_env_with_numba(self):
-        # 调用 `register_swarm_components` 执行当前处理。
         register_swarm_components()
 
-        # 保存或更新 `env_name` 的值。
         env_name = 'quadrotor_multi'
-        # 保存或更新 `experiment_name` 的值。
         experiment_name = 'test_numba'
-        # 保存或更新 `cfg` 的值。
+        # 这里拿到的是训练或评估全流程共享的总配置对象，后续模型注册、环境创建和 PPO 超参数都会从中读取。
         cfg = parse_swarm_cfg(argv=["--algo=APPO", f"--env={env_name}", f"--experiment={experiment_name}"])
-        # 保存或更新 `cfg.quads_use_numba` 的值。
         cfg.quads_use_numba = True
-        # 保存或更新 `assertIsNotNone(create_env(env_name, cfg` 的值。
         self.assertIsNotNone(create_env(env_name, cfg=cfg))
-        # 调用 `run_multi_quadrotor_env` 执行当前处理。
         run_multi_quadrotor_env(env_name, cfg)

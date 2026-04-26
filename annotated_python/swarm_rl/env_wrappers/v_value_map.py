@@ -1,119 +1,90 @@
 # 中文注释副本；原始文件：swarm_rl/env_wrappers/v_value_map.py
 # 说明：为避免修改源码，本文件仅作为阅读辅助材料。
+# 该文件属于强化学习训练侧逻辑，负责把环境、模型、配置或评估流程接到 Sample Factory 框架上。
+# 这里产生的数据通常会继续流向训练循环、策略网络或实验分析脚本。
 
-# 导入当前模块依赖。
+# 下面这组导入把当前模块会消费的环境组件、训练接口或数值工具集中拉进来；真正重要的是后续它们怎样参与数据流。
 import copy
 
-# 导入当前模块依赖。
+# 下面这组导入把当前模块会消费的环境组件、训练接口或数值工具集中拉进来；真正重要的是后续它们怎样参与数据流。
 import gymnasium as gym
 import numpy as np
 from sample_factory.algo.utils.rl_utils import prepare_and_normalize_obs
 
-# 导入当前模块依赖。
+# 下面这组导入把当前模块会消费的环境组件、训练接口或数值工具集中拉进来；真正重要的是后续它们怎样参与数据流。
 from gym_art.quadrotor_multi.tests.plot_v_value_2d import plot_v_value_2d
 
 
-# 定义类 `V_ValueMapWrapper`。
+# `V_ValueMapWrapper` 是当前文件暴露的核心类型，它负责维护与该模块职责直接相关的长期状态。
 class V_ValueMapWrapper(gym.Wrapper):
-    # 定义函数 `__init__`。
+    # 初始化阶段会把实验配置翻译成环境内部状态，包括单机实例、观测裁剪边界、碰撞阈值、障碍物和日志缓存。
+    # 这些状态会在后续每个 step 中被不断读取和更新，因此这里决定了环境运行时的数据布局。
     def __init__(self, env, model, render_mode=None):
-        # 下面的文档字符串用于说明当前模块或代码块。
+        # 下面的文档字符串通常由源码作者提供，用来补充模块职责、输入输出约束或使用方式。
         """A wrapper that visualize V-value map at each time step"""
-        # 调用 `__init__` 执行当前处理。
         gym.Wrapper.__init__(self, env)
-        # 保存或更新 `_render_mode` 的值。
         self._render_mode = render_mode
-        # 保存或更新 `curr_obs` 的值。
         self.curr_obs = None
-        # 保存或更新 `model` 的值。
         self.model = model
 
-    # 定义函数 `reset`。
+    # `reset` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
     def reset(self, **kwargs):
-        # 同时更新 `obs`, `info` 等变量。
         obs, info = self.env.reset()
-        # 保存或更新 `curr_obs` 的值。
         self.curr_obs = obs
-        # 返回当前函数的结果。
+        # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
         return obs, info
 
-    # 定义函数 `step`。
+    # `step` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
     def step(self, action):
-        # 同时更新 `obs`, `reward`, `info`, `terminated` 等变量。
         obs, reward, info, terminated, truncated = self.env.step(action)
-        # 保存或更新 `curr_obs` 的值。
         self.curr_obs = obs
-        # 返回当前函数的结果。
+        # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
         return obs, reward, info, terminated, truncated
 
-    # 定义函数 `render`。
+    # `render` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
     def render(self):
-        # 根据条件决定是否进入当前分支。
         if self._render_mode == 'rgb_array':
-            # 保存或更新 `frame` 的值。
             frame = self.env.render()
-            # 根据条件决定是否进入当前分支。
             if frame is not None:
-                # 同时更新 `width`, `height` 等变量。
                 width, height = frame.shape[0], frame.shape[1]
-                # 保存或更新 `v_value_map_2d` 的值。
                 v_value_map_2d = self.get_v_value_map_2d(width=width, height=height)
-                # 保存或更新 `frame` 的值。
+                # 这里执行观测拼接，把分散的物理特征重组为策略网络期望的固定顺序向量。
                 frame = np.concatenate((frame, v_value_map_2d), axis=1)
-            # 返回当前函数的结果。
+            # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
             return frame
-        # 当前置条件都不满足时，执行兜底分支。
         else:
-            # 返回当前函数的结果。
+            # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
             return self.env.render()
 
-    # 定义函数 `get_v_value_map_2d`。
+    # `get_v_value_map_2d` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
     def get_v_value_map_2d(self, width=None, height=None):
-        # 保存或更新 `tmp_score` 的值。
         tmp_score = []
-        # 保存或更新 `idx` 的值。
         idx = []
-        # 保存或更新 `idy` 的值。
         idy = []
-        # 保存或更新 `rnn_states` 的值。
         rnn_states = None
-        # 保存或更新 `obs` 的值。
+        # 这里构造的是环境默认奖励权重表，表示在没有实验覆盖时多机导航任务各个目标项的基准权重。
         obs = dict(obs=np.array(self.curr_obs))
-        # 保存或更新 `normalized_obs` 的值。
         normalized_obs = prepare_and_normalize_obs(self.model, obs)
-        # 同时更新 `init_x`, `init_y` 等变量。
         init_x, init_y = copy.deepcopy(normalized_obs['obs'][0][0]), copy.deepcopy(normalized_obs['obs'][0][1])
-        # 遍历当前序列或迭代器，逐项执行下面的逻辑。
         for i in range(-10, 11):
-            # 保存或更新 `ti_score` 的值。
             ti_score = []
-            # 遍历当前序列或迭代器，逐项执行下面的逻辑。
             for j in range(-10, 11):
-                # 保存或更新 `normalized_obs[obs][0][0]` 的值。
                 normalized_obs['obs'][0][0] = init_x + i * 0.2
-                # 保存或更新 `normalized_obs[obs][0][1]` 的值。
                 normalized_obs['obs'][0][1] = init_y + j * 0.2
 
                 # x = self.model.forward_head(self.curr_obs)
                 # x, new_rnn_states = self.model.forward_core(x, rnn_states)
                 # result = self.model.forward_tail(x, values_only=True, sample_actions=True)
-                # 保存或更新 `result` 的值。
                 result = self.model.forward(normalized_obs, rnn_states, values_only=True)
 
-                # 调用 `append` 执行当前处理。
                 ti_score.append(result['values'].item())
-                # 调用 `append` 执行当前处理。
                 idx.append(i * 0.2)
-                # 调用 `append` 执行当前处理。
                 idy.append(j * 0.2)
 
-            # 调用 `append` 执行当前处理。
             tmp_score.append(ti_score)
 
-        # 同时更新 `idx`, `idy`, `tmp_score` 等变量。
         idx, idy, tmp_score = np.array(idx), np.array(idy), np.array(tmp_score)
-        # 保存或更新 `v_value_map_2d` 的值。
         v_value_map_2d = plot_v_value_2d(idx, idy, tmp_score, width=width, height=height)
 
-        # 返回当前函数的结果。
+        # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
         return v_value_map_2d

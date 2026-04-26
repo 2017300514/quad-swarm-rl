@@ -1,77 +1,57 @@
-# 中文注释副本；原始文件：gym_art/quadrotor_multi/scenarios/dynamic_diff_goal.py
-# 说明：为避免修改源码，本文件仅作为阅读辅助材料。
-
-# 导入当前模块依赖。
 import numpy as np
 
-# 导入当前模块依赖。
 from gym_art.quadrotor_multi.scenarios.utils import get_z_value
 from gym_art.quadrotor_multi.scenarios.base import QuadrotorScenario
 
+# 这是“不同目标 + 周期性整组重采”的动态任务。
+# 与 `dynamic_same_goal` 相比，这里不只是把整队平移到一个新中心，而是会同时重采编队几何、
+# 目标中心和 agent-goal 对应关系，因此外层环境在结算 reward、distance-to-goal 和成功率时，
+# 看到的是一次彻底换任务后的新目标集合。
 
-# 定义类 `Scenario_dynamic_diff_goal`。
+
 class Scenario_dynamic_diff_goal(QuadrotorScenario):
-    # 定义函数 `__init__`。
     def __init__(self, quads_mode, envs, num_agents, room_dims):
-        # 调用 `super` 执行当前处理。
         super().__init__(quads_mode, envs, num_agents, room_dims)
-        # teleport every [4.0, 6.0] secs
-        # 保存或更新 `duration_time` 的值。
+        # 目标组每隔几秒整体“传送”一次，具体间隔会在 reset 时再随机化。
         duration_time = 5.0
-        # 保存或更新 `control_step_for_sec` 的值。
         self.control_step_for_sec = int(duration_time * self.envs[0].control_freq)
 
-    # 定义函数 `update_goals`。
     def update_goals(self):
-        # Reset formation and related parameters
-        # 调用 `update_formation_and_relate_param` 执行当前处理。
+        # 每次切换都重新抽 formation / formation_size / layer_dist。
+        # 这意味着策略不能假设下一轮仍沿用上一轮的几何结构。
         self.update_formation_and_relate_param()
 
-        # Reset goals
-        # 保存或更新 `goals` 的值。
+        # 先围绕当前 `formation_center` 生成一整组新目标，再打乱分配顺序。
+        # 打乱后，第 i 架无人机下一步追的目标既可能换位置，也可能换槽位语义。
         self.goals = self.generate_goals(num_agents=self.num_agents, formation_center=self.formation_center,
                                          layer_dist=self.layer_dist)
-        # 调用 `shuffle` 执行当前处理。
         np.random.shuffle(self.goals)
 
-    # 定义函数 `step`。
     def step(self):
-        # 保存或更新 `tick` 的值。
         tick = self.envs[0].tick
-        # 根据条件决定是否进入当前分支。
         if tick % self.control_step_for_sec == 0 and tick > 0:
-            # 保存或更新 `box_size` 的值。
             box_size = self.envs[0].box
-            # 同时更新 `x`, `y` 等变量。
             x, y = np.random.uniform(low=-box_size, high=box_size, size=(2,))
 
-            # Get z value, and make sure all goals will above the ground
-            # 保存或更新 `z` 的值。
+            # 新中心的 z 轴不能只随机，否则球形或竖直编队可能直接穿地板。
+            # 这里仍通过 `get_z_value` 按当前几何规模估一个安全下界。
             z = get_z_value(num_agents=self.num_agents, num_agents_per_layer=self.num_agents_per_layer,
                             box_size=box_size, formation=self.formation, formation_size=self.formation_size)
 
-            # 保存或更新 `formation_center` 的值。
             self.formation_center = np.array([x, y, z])
-            # 调用 `update_goals` 执行当前处理。
             self.update_goals()
 
-            # Update goals to envs
-            # 遍历当前序列或迭代器，逐项执行下面的逻辑。
+            # 场景层只负责改写目标；真正的轨迹追踪、碰撞修正和指标累积仍由 `quadrotor_multi.py` 继续消费。
             for i, env in enumerate(self.envs):
-                # 保存或更新 `env.goal` 的值。
                 env.goal = self.goals[i]
 
-        # 返回当前函数的结果。
         return
 
-    # 定义函数 `reset`。
     def reset(self):
-        # Update duration time
-        # 保存或更新 `duration_time` 的值。
+        # 每个 episode 随机一个换目标间隔，避免策略只适应单一节奏。
         duration_time = np.random.uniform(low=4.0, high=6.0)
-        # 保存或更新 `control_step_for_sec` 的值。
         self.control_step_for_sec = int(duration_time * self.envs[0].control_freq)
 
-        # Reset formation, and parameters related to the formation; formation center; goals
-        # 调用 `standard_reset` 执行当前处理。
+        # 初始状态仍复用基类标准 reset：
+        # 先抽一套不同目标编队，再由外层环境把这些 goals 分配给各个子环境。
         self.standard_reset()

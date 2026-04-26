@@ -1,23 +1,24 @@
+#!/usr/bin/env python
 # 中文注释副本；原始文件：swarm_rl/sim2real/sim2real.py
 # 说明：为避免修改源码，本文件仅作为阅读辅助材料。
+# 该文件是 sim2real 导出主入口。
+# 上游输入是训练完成后的 Sample Factory checkpoint、对应配置，以及用户指定的导出模式；
+# 下游输出是纯 C 形式的板载推理源码字符串和落盘后的 `model.c`。
+# 它把训练侧的 actor-critic 模型重新实例化、提取 encoder 权重，再按 single / attention 两条分支拼成部署代码。
 
-# 导入当前模块依赖。
 import argparse
 import json
 import os
 from distutils.util import strtobool
 from pathlib import Path
 
-# 导入当前模块依赖。
 import torch
 import torch.nn as nn
 from attrdict import AttrDict
 from typing import List
 
-# 导入当前模块依赖。
 from sample_factory.model.actor_critic import create_actor_critic
 
-# 导入当前模块依赖。
 from swarm_rl.env_wrappers.quad_utils import make_quadrotor_env_multi
 from swarm_rl.sim2real.code_blocks import (
     headers_network_evaluate,
@@ -30,135 +31,92 @@ from swarm_rl.sim2real.code_blocks import (
     headers_multi_agent_attention,
     attention_body
 )
-# 导入当前模块依赖。
 from swarm_rl.train import register_swarm_components
 
 
-# 定义函数 `parse_args`。
 def parse_args():
-    # 保存或更新 `parser` 的值。
+    # 这里收集的不是训练参数，而是“从哪里读训练好的 torch 模型、导出成什么形式、是否做测试版导出”的部署参数。
     parser = argparse.ArgumentParser()
-    # 保存或更新 `parser.add_argument(--torch_model_dir, type` 的值。
     parser.add_argument('--torch_model_dir', type=str, default='swarm_rl/sim2real/torch_models/single',
                         help='Path where the policy and cfg is stored')
-    # 保存或更新 `parser.add_argument(--output_dir, type` 的值。
     parser.add_argument('--output_dir', type=str, default='swarm_rl/sim2real/c_models',
                         help='Where you want the c model to be saved')
-    # 保存或更新 `parser.add_argument(--output_model_name, type` 的值。
     parser.add_argument('--output_model_name', type=str, default='model.c')
-    # 保存或更新 `parser.add_argument(--testing, type` 的值。
     parser.add_argument('--testing', type=lambda x: bool(strtobool(x)), default=False,
                         help='Whether or not to save the c model in testing mode. Enable this if you want to run the '
                              'unit test to make sure the output of the c model is the same as the pytorch model. Set '
                              'to False if you want to output a c model that will be actually used for sim2real')
-    # 保存或更新 `parser.add_argument(--model_type, type` 的值。
     parser.add_argument('--model_type', type=str, choices=['single', 'attention'],
                         help='What kind of model we are working with. '
                              'Currently only single drone models are supported.')
-    # 保存或更新 `args` 的值。
     args = parser.parse_args()
-    # 返回当前函数的结果。
     return AttrDict(vars(args))
 
 
-# 定义函数 `torch_to_c_model`。
 def torch_to_c_model(args):
-    # 保存或更新 `model_dir` 的值。
+    # sim2real 主入口先加载训练好的 PyTorch 模型，
+    # 再根据 `model_type` 分流到单机 MLP 导出或 attention 导出路径。
     model_dir = Path(args.torch_model_dir)
-    # 保存或更新 `model` 的值。
     model = load_sf_model(model_dir, args.model_type)
 
-    # 保存或更新 `output_dir` 的值。
     output_dir = Path(args.output_dir)
-    # 保存或更新 `output_path` 的值。
     output_path = output_dir.joinpath(args.model_type, args.output_model_name)
-    # 保存或更新 `output_folder` 的值。
     output_folder = output_dir.joinpath(args.model_type)
-    # 根据条件决定是否进入当前分支。
     if args.model_type == 'single':
-        # 保存或更新 `generate_c_model(model, str(output_path), str(output_folder), testing` 的值。
         generate_c_model(model, str(output_path), str(output_folder), testing=args.testing)
-    # 当前置条件都不满足时，执行兜底分支。
     else:
-        # 保存或更新 `generate_c_model_attention(model, str(output_path), str(output_folder), testing` 的值。
         generate_c_model_attention(model, str(output_path), str(output_folder), testing=args.testing)
 
 
-# 定义函数 `load_sf_model`。
 def load_sf_model(model_dir: Path, model_type: str):
-    # 下面开始文档字符串说明。
     """
         Load a trained SF pytorch model
     """
-    # 断言当前条件成立，用于保护运行假设。
     assert model_dir.exists(), f'Path {str(model_dir)} is not a valid path'
-    # Load hyper-parameters
-    # 保存或更新 `cfg_path` 的值。
+    # 先读训练时保存的 config，再在此基础上改成导出期需要的配置。
+    # 这一步的关键不是复用原训练超参数本身，而是保证模型结构和观测空间能被一模一样地重建出来。
     cfg_path = model_dir.joinpath('config.json')
-    # 使用上下文管理器包裹后续资源操作。
     with open(cfg_path, 'r') as f:
-        # 保存或更新 `args` 的值。
         args = json.load(f)
-    # 保存或更新 `args` 的值。
     args = AttrDict(args)
 
-    # Manually set some values
-    # 保存或更新 `args.visualize_v_value` 的值。
+    # 导出阶段显式覆盖若干配置：
+    # 关闭 value 可视化、固定 encoder 类型、关闭障碍 domain randomization、打开 sim2real 轻量分支。
     args.visualize_v_value = False
-    # 执行这一行逻辑。
     args.quads_encoder_type = 'attention' if model_type == 'attention' else 'corl'
-    # 保存或更新 `args.quads_obstacle_scan_range` 的值。
     args.quads_obstacle_scan_range = 0
-    # 保存或更新 `args.quads_obstacle_ray_num` 的值。
     args.quads_obstacle_ray_num = 0
-    # 保存或更新 `args.quads_sim2real` 的值。
     args.quads_sim2real = True
-    # 保存或更新 `args.quads_domain_random` 的值。
     args.quads_domain_random = False
-    # 保存或更新 `args.quads_obst_density_random` 的值。
     args.quads_obst_density_random = False
-    # 保存或更新 `args.quads_obst_density_min` 的值。
     args.quads_obst_density_min = 0
-    # 保存或更新 `args.quads_obst_density_max` 的值。
     args.quads_obst_density_max = 0
-    # 保存或更新 `args.quads_obst_size_random` 的值。
     args.quads_obst_size_random = False
-    # 保存或更新 `args.quads_obst_size_min` 的值。
     args.quads_obst_size_min = 0
-    # 保存或更新 `args.quads_obst_size_max` 的值。
     args.quads_obst_size_max = 0
 
-    # Load model
-    # 调用 `register_swarm_components` 执行当前处理。
+    # 这里重新注册环境和模型工厂，并实例化一个 dummy env，
+    # 只是为了拿到正确的 observation/action space，从而按训练时同样的结构构建 actor-critic。
     register_swarm_components()
     # spawn a dummy env, so we can get the obs and action space info
-    # 保存或更新 `env` 的值。
     env = make_quadrotor_env_multi(args)
-    # 保存或更新 `model` 的值。
     model = create_actor_critic(args, env.observation_space, env.action_space)
-    # 保存或更新 `model_path` 的值。
     model_path = list(model_dir.glob('*.pth'))[0]
-    # 调用 `load_state_dict` 执行当前处理。
     model.load_state_dict(torch.load(model_path)['model'])
 
-    # 返回当前函数的结果。
     return model
 
 
-# 定义函数 `process_layer`。
 def process_layer(name: str, param: nn.Parameter, type: str):
-    # 下面开始文档字符串说明。
     '''
     Convert a torch parameter from the NN into a c-equivalent represented as a string 
     '''
-    # 根据条件决定是否进入当前分支。
+    # 这里把 PyTorch parameter 展平成 C 源码里的静态数组定义。
+    # 后面的代码拼装函数并不再关心 tensor，只关心这些字符串块怎样组合成可编译源码。
     if type == 'weight':
-        # 保存或更新 `weight` 的值。
         weight = 'static const float ' + name + '[' + str(param.shape[0]) + '][' + str(param.shape[1]) + '] = {'
-        # 遍历当前序列或迭代器，逐项执行下面的逻辑。
         for row in param:
             weight += '{'
-            # 遍历当前序列或迭代器，逐项执行下面的逻辑。
             for num in row:
                 weight += str(num.item()) + ','
             # get rid of comma after the last number
@@ -167,149 +125,88 @@ def process_layer(name: str, param: nn.Parameter, type: str):
         # get rid of comma after the last curly bracket
         weight = weight[:-1]
         weight += '};\n'
-        # 返回当前函数的结果。
         return weight
-    # 当前置条件都不满足时，执行兜底分支。
     else:
-        # 保存或更新 `bias` 的值。
         bias = 'static const float ' + name + '[' + str(param.shape[0]) + '] = {'
-        # 遍历当前序列或迭代器，逐项执行下面的逻辑。
         for num in param:
             bias += str(num.item()) + ','
         # get rid of comma after last number
         bias = bias[:-1]
         bias += '};\n'
-        # 返回当前函数的结果。
         return bias
 
 
-# 定义函数 `generate_c_weights_attention`。
 def generate_c_weights_attention(model: nn.Module, transpose: bool = False):
-    # 下面开始文档字符串说明。
     """
             Generate c friendly weight strings for the c version of the attention model
             order is: self-encoder, neighbor-encoder, obst-encoder, attention, then final combined output layers 
     """
-    # 同时更新 `self_weights`, `self_biases`, `self_layer_names`, `self_bias_names` 等变量。
+    # attention 模型导出时，要先按子模块把参数分桶：
+    # self encoder、neighbor encoder、obstacle encoder、attention block、最终输出层。
+    # 这样后面才能分别套进对应的 C 模板代码块。
     self_weights, self_biases, self_layer_names, self_bias_names = [], [], [], []
-    # 同时更新 `neighbor_weights`, `neighbor_biases`, `nbr_layer_names`, `nbr_bias_names` 等变量。
     neighbor_weights, neighbor_biases, nbr_layer_names, nbr_bias_names = [], [], [], []
-    # 同时更新 `obst_weights`, `obst_biases`, `obst_layer_names`, `obst_bias_names` 等变量。
     obst_weights, obst_biases, obst_layer_names, obst_bias_names = [], [], [], []
-    # 同时更新 `attn_weights`, `attn_biases`, `attn_layer_names`, `attn_bias_names` 等变量。
     attn_weights, attn_biases, attn_layer_names, attn_bias_names = [], [], [], []
-    # 同时更新 `out_weights`, `out_biases`, `out_layer_names`, `out_bias_names` 等变量。
     out_weights, out_biases, out_layer_names, out_bias_names = [], [], [], [],
-    # 保存或更新 `outputs` 的值。
     outputs = []
-    # 同时更新 `n_self`, `n_nbr`, `n_obst` 等变量。
     n_self, n_nbr, n_obst = 0, 0, 0
-    # 遍历当前序列或迭代器，逐项执行下面的逻辑。
     for name, param in model.named_parameters():
-        # get the self encoder weights 
-        # 根据条件决定是否进入当前分支。
+        # 注意导出到 C 端时有时需要转置权重，
+        # 因为 PyTorch 的线性层权重布局和手写 C for-loop 的乘法方向不同。
         if transpose:
-            # 保存或更新 `param` 的值。
             param = param.T
-        # 保存或更新 `c_name` 的值。
         c_name = name.replace('.', '_')
-        # 根据条件决定是否进入当前分支。
         if 'weight' in c_name and 'critic' not in c_name and 'layer_norm' not in c_name:
-            # 保存或更新 `weight` 的值。
             weight = process_layer(c_name, param, type='weight')
-            # 根据条件决定是否进入当前分支。
             if 'self_embed' in c_name:
-                # 调用 `append` 执行当前处理。
                 self_layer_names.append(name)
-                # 调用 `append` 执行当前处理。
                 self_weights.append(weight)
-                # 调用 `append` 执行当前处理。
                 outputs.append('static float output_' + str(n_self) + '[' + str(param.shape[1]) + '];\n')
-                # 保存或更新 `n_self` 的值。
                 n_self += 1
-            # 当上一分支不满足时，继续判断新的条件。
             elif 'neighbor_embed' in c_name:
-                # 调用 `append` 执行当前处理。
                 nbr_layer_names.append(name)
-                # 调用 `append` 执行当前处理。
                 neighbor_weights.append(weight)
-                # 调用 `append` 执行当前处理。
                 outputs.append('static float nbr_output_' + str(n_nbr) + '[' + str(param.shape[1]) + '];\n')
-                # 保存或更新 `n_nbr` 的值。
                 n_nbr += 1
-            # 当上一分支不满足时，继续判断新的条件。
             elif 'obstacle_embed' in c_name:
-                # 调用 `append` 执行当前处理。
                 obst_layer_names.append(name)
-                # 调用 `append` 执行当前处理。
                 obst_weights.append(weight)
-                # 调用 `append` 执行当前处理。
                 outputs.append('static float obst_output_' + str(n_obst) + '[' + str(param.shape[1]) + '];\n')
-                # 保存或更新 `n_obst` 的值。
                 n_obst += 1
-            # 当上一分支不满足时，继续判断新的条件。
             elif 'attention' in c_name or 'layer_norm' in c_name:
-                # 调用 `append` 执行当前处理。
                 attn_layer_names.append(name)
-                # 调用 `append` 执行当前处理。
                 attn_weights.append(weight)
-            # 当前置条件都不满足时，执行兜底分支。
             else:
                 # output layer
-                # 调用 `append` 执行当前处理。
                 out_layer_names.append(name)
-                # 调用 `append` 执行当前处理。
                 out_weights.append(weight)
                 # these will be considered part of the self encoder
-                # 调用 `append` 执行当前处理。
                 outputs.append('static float output_' + str(n_self) + '[' + str(param.shape[1]) + '];\n')
-                # 保存或更新 `n_self` 的值。
                 n_self += 1
-        # 根据条件决定是否进入当前分支。
         if ('bias' in c_name or 'layer_norm' in c_name) and 'critic' not in c_name:
-            # 保存或更新 `bias` 的值。
             bias = process_layer(c_name, param, type='bias')
-            # 根据条件决定是否进入当前分支。
             if 'self_embed' in c_name:
-                # 调用 `append` 执行当前处理。
                 self_bias_names.append(name)
-                # 调用 `append` 执行当前处理。
                 self_biases.append(bias)
-            # 当上一分支不满足时，继续判断新的条件。
             elif 'neighbor_embed' in c_name:
-                # 调用 `append` 执行当前处理。
                 nbr_bias_names.append(name)
-                # 调用 `append` 执行当前处理。
                 neighbor_biases.append(bias)
-            # 当上一分支不满足时，继续判断新的条件。
             elif 'obstacle_embed' in c_name:
-                # 调用 `append` 执行当前处理。
                 obst_bias_names.append(name)
-                # 调用 `append` 执行当前处理。
                 obst_biases.append(bias)
-            # 当上一分支不满足时，继续判断新的条件。
             elif 'attention' in c_name or 'layer_norm' in c_name:
-                # 调用 `append` 执行当前处理。
                 attn_bias_names.append(name)
-                # 调用 `append` 执行当前处理。
                 attn_biases.append(bias)
-            # 当前置条件都不满足时，执行兜底分支。
             else:
                 # output layer
-                # 调用 `append` 执行当前处理。
                 out_bias_names.append(name)
-                # 调用 `append` 执行当前处理。
                 out_biases.append(bias)
 
-    # 保存或更新 `self_layer_names` 的值。
     self_layer_names += out_layer_names
-    # 保存或更新 `self_bias_names` 的值。
     self_bias_names += out_bias_names
-    # 保存或更新 `self_weights` 的值。
     self_weights += out_weights
-    # 保存或更新 `self_biases` 的值。
     self_biases += out_biases
-    # 保存或更新 `info` 的值。
     info = {
         'encoders': {
             'self': [self_layer_names, self_bias_names, self_weights, self_biases],
@@ -321,40 +218,27 @@ def generate_c_weights_attention(model: nn.Module, transpose: bool = False):
         'outputs': outputs
     }
 
-    # 返回当前函数的结果。
     return info
 
 
-# 定义函数 `generate_c_weights`。
 def generate_c_weights(model: nn.Module, transpose: bool = False):
-    # 下面开始文档字符串说明。
     """
         Generate c friendly weight strings for the c version of the model
     """
-    # 同时更新 `weights`, `biases` 等变量。
+    # 这是单机非 attention 分支的简化版本。
+    # 相比 attention 导出，不再按多子模块拆桶，而是按普通串行 MLP 层顺序直接展开。
     weights, biases = [], []
-    # 同时更新 `layer_names`, `bias_names`, `outputs` 等变量。
     layer_names, bias_names, outputs = [], [], []
-    # 保存或更新 `n_bias` 的值。
     n_bias = 0
-    # 遍历当前序列或迭代器，逐项执行下面的逻辑。
     for name, param in model.named_parameters():
-        # 根据条件决定是否进入当前分支。
         if transpose:
-            # 保存或更新 `param` 的值。
             param = param.T
-        # 保存或更新 `name` 的值。
         name = name.replace('.', '_')
-        # 根据条件决定是否进入当前分支。
         if 'weight' in name and 'critic' not in name and 'layer_norm' not in name:
-            # 调用 `append` 执行当前处理。
             layer_names.append(name)
-            # 保存或更新 `weight` 的值。
             weight = 'static const float ' + name + '[' + str(param.shape[0]) + '][' + str(param.shape[1]) + '] = {'
-            # 遍历当前序列或迭代器，逐项执行下面的逻辑。
             for row in param:
                 weight += '{'
-                # 遍历当前序列或迭代器，逐项执行下面的逻辑。
                 for num in row:
                     weight += str(num.item()) + ','
                 # get rid of comma after the last number
@@ -363,37 +247,27 @@ def generate_c_weights(model: nn.Module, transpose: bool = False):
             # get rid of comma after the last curly bracket
             weight = weight[:-1]
             weight += '};\n'
-            # 调用 `append` 执行当前处理。
             weights.append(weight)
 
-        # 根据条件决定是否进入当前分支。
         if 'bias' in name or 'layer_norm' in name and 'critic' not in name:
-            # 调用 `append` 执行当前处理。
             bias_names.append(name)
-            # 保存或更新 `bias` 的值。
             bias = 'static const float ' + name + '[' + str(param.shape[0]) + '] = {'
-            # 遍历当前序列或迭代器，逐项执行下面的逻辑。
             for num in param:
                 bias += str(num.item()) + ','
             # get rid of comma after last number
             bias = bias[:-1]
             bias += '};\n'
-            # 调用 `append` 执行当前处理。
             biases.append(bias)
-            # 保存或更新 `output` 的值。
             output = 'static float output_' + str(n_bias) + '[' + str(param.shape[0]) + '];\n'
-            # 调用 `append` 执行当前处理。
             outputs.append(output)
-            # 保存或更新 `n_bias` 的值。
             n_bias += 1
 
-    # 返回当前函数的结果。
     return layer_names, bias_names, weights, biases, outputs
 
 
-# 定义函数 `self_encoder_c_str`。
 def self_encoder_c_str(prefix: str, weight_names: List[str], bias_names: List[str]):
-    # 保存或更新 `method` 的值。
+    # 这个函数生成单机 MLP 版本 `networkEvaluate()` 的核心 for-loop 字符串。
+    # 也就是把训练期线性层和 tanh 激活显式展开成板载侧可执行的纯 C 前向传播。
     method = """void networkEvaluate(struct control_t_n *control_n, const float *state_array) {"""
     num_layers = len(weight_names)
     # write the for loops for forward-prop
@@ -411,7 +285,6 @@ def self_encoder_c_str(prefix: str, weight_names: List[str], bias_names: List[st
     for_loops.append(input_for_loop)
 
     # rest of the hidden layers
-    # 遍历当前序列或迭代器，逐项执行下面的逻辑。
     for n in range(1, num_layers - 1):
         for_loop = f'''
             for (int i = 0; i < {prefix}_structure[{str(n)}][1]; i++) {{
@@ -438,12 +311,10 @@ def self_encoder_c_str(prefix: str, weight_names: List[str], bias_names: List[st
     '''
     for_loops.append(output_for_loop)
 
-    # 遍历当前序列或迭代器，逐项执行下面的逻辑。
     for code in for_loops:
         method += code
-    # 根据条件决定是否进入当前分支。
     if 'self' in prefix:
-        # assign network outputs to control
+        # 末层 4 维输出固定解释成四电机推力。
         assignment = """
                     control_n->thrust_0 = output_""" + str(n) + """[0];
                     control_n->thrust_1 = output_""" + str(n) + """[1];
@@ -453,13 +324,12 @@ def self_encoder_c_str(prefix: str, weight_names: List[str], bias_names: List[st
         method += assignment
     # closing bracket
     method += """}\n\n"""
-    # 返回当前函数的结果。
     return method
 
 
-# 定义函数 `self_encoder_attn_c_str`。
 def self_encoder_attn_c_str(prefix: str, weight_names: List[str], bias_names: List[str]):
-    # 保存或更新 `method` 的值。
+    # attention 分支下，self encoder 只负责自身状态 embedding 和最终 feed-forward 收口。
+    # 邻居、障碍和注意力本体分别由其它模板函数/代码块补上。
     method = """void networkEvaluate(struct control_t_n *control_n, const float *state_array) {"""
     num_layers = len(weight_names)
     # write the for loops for forward-prop of self embed layer
@@ -477,8 +347,7 @@ def self_encoder_attn_c_str(prefix: str, weight_names: List[str], bias_names: Li
     '''
     for_loops.append(input_for_loop)
 
-    # concat self embedding and attention embedding
-    # for n in range(1, num_layers - 1):
+    # 这里按训练时的布局，把 self embedding 与两个 attention token 的输出拼回同一个大向量。
     for_loop = f'''
         // Concat self_embed, neighbor_embed and obst_embed
         for (int i = 0; i < self_structure[0][1]; i++) {{
@@ -516,10 +385,8 @@ def self_encoder_attn_c_str(prefix: str, weight_names: List[str], bias_names: Li
         '''
     for_loops.append(output_for_loop)
 
-    # 遍历当前序列或迭代器，逐项执行下面的逻辑。
     for code in for_loops:
         method += code
-    # 根据条件决定是否进入当前分支。
     if 'self' in prefix:
         # assign network outputs to control
         assignment = """
@@ -531,13 +398,12 @@ def self_encoder_attn_c_str(prefix: str, weight_names: List[str], bias_names: Li
         method += assignment
     # closing bracket
     method += """}\n\n"""
-    # 返回当前函数的结果。
     return method
 
 
-# 定义函数 `neighbor_encoder_c_string`。
 def neighbor_encoder_c_string(prefix: str, weight_names: List[str], bias_names: List[str]):
-    # 保存或更新 `method` 的值。
+    # 这个模板生成邻居 embedding 的 C 实现。
+    # 输入是展平后的邻居观测向量，输出是后续 attention 会消费的 `neighbor_embeds`。
     method = """void neighborEmbedder(const float neighbor_inputs[NEIGHBORS * NBR_DIM]) {
     """
     num_layers = len(weight_names)
@@ -557,7 +423,6 @@ def neighbor_encoder_c_string(prefix: str, weight_names: List[str], bias_names: 
     for_loops.append(input_for_loop)
 
     # hidden layers
-    # 遍历当前序列或迭代器，逐项执行下面的逻辑。
     for n in range(1, num_layers - 1):
         for_loop = f'''
                 for (int i = 0; i < {prefix}_structure[{str(n)}][1]; i++) {{
@@ -573,7 +438,6 @@ def neighbor_encoder_c_string(prefix: str, weight_names: List[str], bias_names: 
 
     # the last hidden layer which is supposed to have no non-linearity
     n = num_layers - 1
-    # 根据条件决定是否进入当前分支。
     if n > 0:
         output_for_loop = f'''
                 for (int i = 0; i < {prefix}_structure[{str(n)}][1]; i++) {{
@@ -586,23 +450,18 @@ def neighbor_encoder_c_string(prefix: str, weight_names: List[str], bias_names: 
                 }}
             }}
         '''
-        # 调用 `append` 执行当前处理。
         for_loops.append(output_for_loop)
 
-    # 遍历当前序列或迭代器，逐项执行下面的逻辑。
     for code in for_loops:
-        # 保存或更新 `method` 的值。
         method += code
     # method closing bracket
-    # 保存或更新 `method` 的值。
     method += """}\n\n"""
-    # 返回当前函数的结果。
     return method
 
 
-# 定义函数 `obstacle_encoder_c_str`。
 def obstacle_encoder_c_str(prefix: str, weight_names: List[str], bias_names: List[str]):
-    # 保存或更新 `method` 的值。
+    # 这一支对应障碍观测编码。
+    # 输入就是环境侧固定 9 维局部障碍观测，输出写进 `obstacle_embeds` 供 attention 使用。
     method = f"""void obstacleEmbedder(const float obstacle_inputs[OBST_DIM]) {{
         //reset embeddings accumulator to zero
         memset(obstacle_embeds, 0, sizeof(obstacle_embeds));
@@ -625,7 +484,6 @@ def obstacle_encoder_c_str(prefix: str, weight_names: List[str], bias_names: Lis
     for_loops.append(input_for_loop)
 
     # rest of the hidden layers
-    # 遍历当前序列或迭代器，逐项执行下面的逻辑。
     for n in range(1, num_layers - 1):
         for_loop = f'''
             for (int i = 0; i < {prefix}_structure[{str(n)}][1]; i++) {{
@@ -641,7 +499,6 @@ def obstacle_encoder_c_str(prefix: str, weight_names: List[str], bias_names: Lis
 
     # the last hidden layer which is supposed to have no non-linearity
     n = num_layers - 1
-    # 根据条件决定是否进入当前分支。
     if n > 0:
         output_for_loop = f'''
             for (int i = 0; i < {prefix}_structure[{str(n)}][1]; i++) {{
@@ -655,7 +512,6 @@ def obstacle_encoder_c_str(prefix: str, weight_names: List[str], bias_names: Lis
         '''
         for_loops.append(output_for_loop)
 
-    # 遍历当前序列或迭代器，逐项执行下面的逻辑。
     for code in for_loops:
         method += code
     # closing bracket
@@ -663,8 +519,9 @@ def obstacle_encoder_c_str(prefix: str, weight_names: List[str], bias_names: Lis
     return method
 
 
-# 定义函数 `generate_c_model_attention`。
 def generate_c_model_attention(model: nn.Module, output_path: str, output_folder: str, testing=False):
+    # 这是 attention sim2real 导出总装函数。
+    # 它把参数字符串、结构数组、attention 代码块、header 和测试代码拼成完整源码文件。
     info = generate_c_weights_attention(model, transpose=True)
     model_state_dict = model.state_dict()
 
@@ -672,14 +529,12 @@ def generate_c_model_attention(model: nn.Module, output_path: str, output_folder
     structures = ""
     methods = ""
 
-    # setup all the encoders
-    # 遍历当前序列或迭代器，逐项执行下面的逻辑。
+    # 先为 self / nbr / obst / attn 四个部分分别生成结构描述和方法体。
     for enc_name, data in info['encoders'].items():
         # data contains [weight_names, bias_names, weights, biases]
         structure = f'static const int {enc_name}_structure [' + str(int(len(data[0]))) + '][2] = {'
 
         weight_names, bias_names = data[0], data[1]
-        # 遍历当前序列或迭代器，逐项执行下面的逻辑。
         for w_name, b_name in zip(weight_names, bias_names):
             w = model_state_dict[w_name].T
             structure += '{' + str(w.shape[0]) + ', ' + str(w.shape[1]) + '},'
@@ -691,23 +546,19 @@ def generate_c_model_attention(model: nn.Module, output_path: str, output_folder
         structures += structure
 
         method = ""
-        # 根据条件决定是否进入当前分支。
         if 'self' in enc_name:
             method = self_encoder_attn_c_str(enc_name, weight_names, bias_names)
-        # 当上一分支不满足时，继续判断新的条件。
         elif 'nbr' in enc_name:
             method = neighbor_encoder_c_string(enc_name, weight_names, bias_names)
-        # 当上一分支不满足时，继续判断新的条件。
         elif 'obst' in enc_name:
             method = obstacle_encoder_c_str(enc_name, weight_names, bias_names)
-        # 当前置条件都不满足时，执行兜底分支。
         else:
             # attention
             method = attention_body
 
         methods += method
 
-    # headers
+    # testing=True 时，导出的不是固件侧版本，而是带本地评估/对比入口的测试版源码。
     source += headers_network_evaluate if not testing else headers_evaluation
     source += headers_multi_agent_attention
 
@@ -719,35 +570,27 @@ def generate_c_model_attention(model: nn.Module, output_path: str, output_folder
     # network eval func
     source += structures
     outputs = info['outputs']
-    # 遍历当前序列或迭代器，逐项执行下面的逻辑。
     for output in outputs:
         source += output
 
     encoders = info['encoders']
 
-    # 遍历当前序列或迭代器，逐项执行下面的逻辑。
     for key, vals in encoders.items():
         weights, biases = vals[-2], vals[-1]
-        # 遍历当前序列或迭代器，逐项执行下面的逻辑。
         for w in weights:
             source += w
-        # 遍历当前序列或迭代器，逐项执行下面的逻辑。
         for b in biases:
             source += b
 
     source += methods
 
-    # 根据条件决定是否进入当前分支。
     if testing:
         source += multi_drone_attn_eval
 
-    # 根据条件决定是否进入当前分支。
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
-    # 根据条件决定是否进入当前分支。
     if output_path:
-        # 使用上下文管理器包裹后续资源操作。
         with open(output_path, 'w') as f:
             f.write(source)
         f.close()
@@ -755,16 +598,15 @@ def generate_c_model_attention(model: nn.Module, output_path: str, output_folder
     return source
 
 
-# 定义函数 `generate_c_model`。
 def generate_c_model(model: nn.Module, output_path: str, output_folder: str, testing=False):
+    # 这是单机 MLP 导出路径。
+    # 相比 attention 版本，它只需要一条串行前馈网络和更简单的结构数组。
     layer_names, bias_names, weights, biases, outputs = generate_c_weights(model, transpose=True)
     num_layers = len(layer_names)
 
     structure = 'static const int structure [' + str(int(num_layers)) + '][2] = {'
-    # 遍历当前序列或迭代器，逐项执行下面的逻辑。
     for name, param in model.named_parameters():
         param = param.T
-        # 根据条件决定是否进入当前分支。
         if 'weight' in name and 'critic' not in name and 'layer_norm' not in name:
             structure += '{' + str(param.shape[0]) + ', ' + str(param.shape[1]) + '},'
 
@@ -788,7 +630,6 @@ def generate_c_model(model: nn.Module, output_path: str, output_folder: str, tes
     for_loops.append(input_for_loop)
 
     # rest of the hidden layers
-    # 遍历当前序列或迭代器，逐项执行下面的逻辑。
     for n in range(1, num_layers - 1):
         for_loop = f'''
         for (int i = 0; i < structure[{str(n)}][1]; i++) {{
@@ -815,7 +656,7 @@ def generate_c_model(model: nn.Module, output_path: str, output_folder: str, tes
     '''
     for_loops.append(output_for_loop)
 
-    # assign network outputs to control
+    # 与训练时一致，最后四个输出仍解释成四路电机推力。
     assignment = """
             control_n->thrust_0 = output_""" + str(n) + """[0];
             control_n->thrust_1 = output_""" + str(n) + """[1];
@@ -825,7 +666,6 @@ def generate_c_model(model: nn.Module, output_path: str, output_folder: str, tes
 
     # construct the network evaluate function
     controller_eval = """void networkEvaluate(struct control_t_n *control_n, const float *state_array) {"""
-    # 遍历当前序列或迭代器，逐项执行下面的逻辑。
     for code in for_loops:
         controller_eval += code
     # assignment to control_n
@@ -844,28 +684,21 @@ def generate_c_model(model: nn.Module, output_path: str, output_folder: str, tes
     source += relu_activation
     # network eval func
     source += structure
-    # 遍历当前序列或迭代器，逐项执行下面的逻辑。
     for output in outputs:
         source += output
-    # 遍历当前序列或迭代器，逐项执行下面的逻辑。
     for weight in weights:
         source += weight
-    # 遍历当前序列或迭代器，逐项执行下面的逻辑。
     for bias in biases:
         source += bias
     source += controller_eval
 
-    # 根据条件决定是否进入当前分支。
     if testing:
         source += single_drone_eval
 
-    # 根据条件决定是否进入当前分支。
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
-    # 根据条件决定是否进入当前分支。
     if output_path:
-        # 使用上下文管理器包裹后续资源操作。
         with open(output_path, 'w') as f:
             f.write(source)
         f.close()
@@ -873,8 +706,8 @@ def generate_c_model(model: nn.Module, output_path: str, output_folder: str, tes
     return source
 
 
-# 根据条件决定是否进入当前分支。
 if __name__ == '__main__':
+    # 命令行执行时，直接走 sim2real 导出主流程。
     # example use case
     # cfg = AttrDict({
     #     'torch_model_dir': 'swarm_rl/sim2real/torch_models/single',

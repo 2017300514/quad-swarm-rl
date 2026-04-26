@@ -1,82 +1,60 @@
-# 中文注释副本；原始文件：gym_art/quadrotor_multi/scenarios/dynamic_formations.py
-# 说明：为避免修改源码，本文件仅作为阅读辅助材料。
-
-# 导入当前模块依赖。
 import numpy as np
 
-# 导入当前模块依赖。
 from gym_art.quadrotor_multi.scenarios.base import QuadrotorScenario
 
+# 这是“目标中心基本不动，但编队尺度连续伸缩”的动态场景。
+# 相比 `dynamic_diff_goal` 或 `swap_goals` 这类离散切换任务，它不改目标集合的拓扑，
+# 而是把难点放在“同一编队在 episode 中持续变大/变小”上，要求策略一边靠近目标，一边实时调整相对间距。
 
-# 定义类 `Scenario_dynamic_formations`。
+
 class Scenario_dynamic_formations(QuadrotorScenario):
-    # 定义函数 `__init__`。
     def __init__(self, quads_mode, envs, num_agents, room_dims):
-        # 调用 `super` 执行当前处理。
         super().__init__(quads_mode, envs, num_agents, room_dims)
-        # if increase_formation_size is True, increase the formation size
-        # else, decrease the formation size
-        # 保存或更新 `increase_formation_size` 的值。
+        # `increase_formation_size` 控制当前是在扩张还是收缩编队。
         self.increase_formation_size = True
-        # low: 0.1m/s, high: 0.3m/s
-        # 保存或更新 `control_speed` 的值。
+        # 这里采样的是一个无量纲缩放速度，后面会乘到每个 control step 的 0.001 尺度增量上。
         self.control_speed = np.random.uniform(low=1.0, high=3.0)
 
-    # change formation sizes on the fly
-    # 定义函数 `update_goals`。
     def update_goals(self):
-        # 保存或更新 `goals` 的值。
+        # `formation_center` 不变时，目标变化完全来自 `formation_size`。
+        # 因此每次更新都要重新展开整组几何坐标，再立刻同步回各个子环境。
         self.goals = self.generate_goals(self.num_agents, self.formation_center, layer_dist=self.layer_dist)
-        # 遍历当前序列或迭代器，逐项执行下面的逻辑。
         for env, goal in zip(self.envs, self.goals):
-            # 保存或更新 `env.goal` 的值。
             env.goal = goal
 
-    # 定义函数 `step`。
     def step(self):
-        # 根据条件决定是否进入当前分支。
+        # 到达上/下界后翻转方向，并重新采一个速度。
+        # 实现上这里的下界判断写成了 `<= -highest_formation_size`，因此真正触发的主要是上界反向；
+        # 注释副本保留源码语义，不改实现。
         if self.formation_size <= -self.highest_formation_size:
-            # 保存或更新 `increase_formation_size` 的值。
             self.increase_formation_size = True
-            # 保存或更新 `control_speed` 的值。
             self.control_speed = np.random.uniform(low=1.0, high=3.0)
-        # 当上一分支不满足时，继续判断新的条件。
         elif self.formation_size >= self.highest_formation_size:
-            # 保存或更新 `increase_formation_size` 的值。
             self.increase_formation_size = False
-            # 保存或更新 `control_speed` 的值。
             self.control_speed = np.random.uniform(low=1.0, high=3.0)
 
-        # 根据条件决定是否进入当前分支。
+        # 每个控制步只推进一个很小的尺度增量，让编队尺寸是连续变化而不是跳变。
         if self.increase_formation_size:
-            # 保存或更新 `formation_size` 的值。
             self.formation_size += 0.001 * self.control_speed
-        # 当前置条件都不满足时，执行兜底分支。
         else:
-            # 保存或更新 `formation_size` 的值。
             self.formation_size -= 0.001 * self.control_speed
 
-        # 调用 `update_goals` 执行当前处理。
+        # 这类任务的核心压力来自“每步都要重算目标几何”。
+        # 因而上层的 distance-to-goal 轨迹会反映一个不断移动的相对目标，而不是固定终点。
         self.update_goals()
-        # 返回当前函数的结果。
         return
 
-    # 定义函数 `reset`。
     def reset(self):
-        # 保存或更新 `increase_formation_size` 的值。
+        # 每个 episode 随机初始伸缩方向和伸缩速度，让策略不要只适应单一呼吸节奏。
         self.increase_formation_size = True if np.random.uniform(low=0.0, high=1.0) < 0.5 else False
-        # 保存或更新 `control_speed` 的值。
         self.control_speed = np.random.uniform(low=1.0, high=3.0)
 
-        # Reset formation, and parameters related to the formation; formation center; goals
-        # 调用 `standard_reset` 执行当前处理。
+        # 其余部分仍沿用场景基类：抽编队、定中心、生成初始 goals。
         self.standard_reset()
 
-    # 定义函数 `update_formation_size`。
     def update_formation_size(self, new_formation_size):
-        # 根据条件决定是否进入当前分支。
+        # 这个入口主要服务于渲染器或外部交互调节。
+        # 一旦外部覆盖 `formation_size`，就立即重建全部 goals，避免场景内部状态和子环境目标脱节。
         if new_formation_size != self.formation_size:
-            # 保存或更新 `formation_size` 的值。
             self.formation_size = new_formation_size if new_formation_size > 0.0 else 0.0
-            # 调用 `update_goals` 执行当前处理。
             self.update_goals()

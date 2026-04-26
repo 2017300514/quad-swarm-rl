@@ -1,9 +1,11 @@
+#!/usr/bin/env python
 # 中文注释副本；原始文件：swarm_rl/sim2real/code_blocks.py
 # 说明：为避免修改源码，本文件仅作为阅读辅助材料。
+# 该文件不执行训练或推理，它保存的是一组 C/C++ 代码模板片段。
+# 上游输入通常来自 sim2real 导出流程拼接出的模型权重和网络结构信息；
+# 下游输出是可写入 Crazyflie/板载控制工程的源码字符串。
+# 可以把它理解成“训练模型结构 -> 板载控制器源码”之间的静态积木库。
 
-#!/usr/bin/env python
-
-# 保存或更新 `headers_controller_nn` 的值。
 headers_controller_nn = """
 #include "math3d.h"
 #include "stabilizer_types.h"
@@ -12,14 +14,14 @@ headers_controller_nn = """
 
 """
 
-# 保存或更新 `headers_network_evaluate` 的值。
 headers_network_evaluate = """
 #include "network_evaluate.h"
 
 """
 
-# 保存或更新 `headers_multi_agent_attention` 的值。
 headers_multi_agent_attention = """
+// 这块头文件片段为板载单头注意力实现准备静态缓冲区。
+// 维度写死成 `D_MODEL=16`、`NUM_TOKENS=2`，对应 sim2real 轻量 attention 分支里的邻居/障碍两个 token。
 // attention stuff
 static const int D_MODEL = 16;
 static const int NUM_TOKENS = 2;
@@ -49,8 +51,8 @@ float exponent;
 """
 
 
-# 保存或更新 `headers_evaluation` 的值。
 headers_evaluation = """
+// 评估侧头文件片段定义控制输出结构体，以及导出网络在本地/仿真评估时用到的固定维度常量。
 #include <random>
 #include <vector>
 #include <iostream>
@@ -76,8 +78,9 @@ static const int OBST_DIM = 9;
 """
 
 
-# 保存或更新 `constants` 的值。
 constants = """
+// 这里保存的是推力和 PWM 之间转换所需的常量。
+// 导出到板载控制器后，最终动作会通过这些系数映射到底层电机命令。
 
 #define MAX_THRUST 0.1597
 // PWM to thrust coefficients
@@ -87,14 +90,12 @@ constants = """
 
 """
 
-# 保存或更新 `controller_init_function` 的值。
 controller_init_function = """
 
 void controllerNNInit(void) {}
 
 """
 
-# 保存或更新 `controller_test_function` 的值。
 controller_test_function = """
 
 bool controllerNNTest(void) {
@@ -103,7 +104,6 @@ bool controllerNNTest(void) {
 
 """
 
-# 保存或更新 `linear_activation` 的值。
 linear_activation = """
 
 float linear(float num) {
@@ -112,7 +112,6 @@ float linear(float num) {
 
 """
 
-# 保存或更新 `sigmoid_activation` 的值。
 sigmoid_activation = """
 
 float sigmoid(float num) {
@@ -121,7 +120,6 @@ float sigmoid(float num) {
 
 """
 
-# 保存或更新 `relu_activation` 的值。
 relu_activation = """
 
 float relu(float num) {
@@ -134,8 +132,8 @@ float relu(float num) {
 
 """
 
-# 保存或更新 `scaling` 的值。
 scaling = """
+// 训练策略输出默认在 [-1, 1]，板载执行前要先缩回 [0, 1] 推力范围。
 // range of action -1 ... 1, need to scale to range 0 .. 1
 float scale(float v) {
 	return 0.5f * (v + 1);
@@ -143,7 +141,6 @@ float scale(float v) {
 
 """
 
-# 保存或更新 `clipping` 的值。
 clipping = """
 
 float clip(float v, float min, float max) {
@@ -154,10 +151,14 @@ float clip(float v, float min, float max) {
 
 """
 
-# 保存或更新 `attention_body` 的值。
 attention_body = """
+// 这是单头注意力在 C 端的手工展开版本。
+// 它复现了 `attention_layer.py` / `quad_multi_model.py` 里的核心计算：
+// token 填充、QKV 投影、softmax、value 聚合、残差和 layer norm。
 void singleHeadAttention() {
         uint8_t i, j, k;
+        // token 0 放邻居 embedding，token 1 放障碍 embedding；
+        // 这与训练时 sim2real 轻量 attention 分支的 token 布局保持一致。
         // fill the tokens matrix with obstacle and neighbor embeddings
         for (i = 0; i < D_MODEL; i++) {
             tokens[0][i] = nbr_output_0[i];
@@ -171,6 +172,7 @@ void singleHeadAttention() {
             }
         }
         
+        // 这里显式展开矩阵乘法，是为了避免板载端依赖完整深度学习运行时。
         // compute Q, K, V projection 
         for (i = 0; i < NUM_TOKENS; i++) {
             for (j = 0; j < D_MODEL; j++) {
@@ -197,7 +199,7 @@ void singleHeadAttention() {
             }
         }
         
-        // softmax
+        // softmax 后得到两个 token 之间的注意力权重。
         for (i = 0; i < NUM_TOKENS; i++) {
             for (j = 0; j < NUM_TOKENS; j++) {
                 attn_weights[i][j] = exp(attn_weights[i][j]) / softmax_sums[i];
@@ -246,6 +248,7 @@ void singleHeadAttention() {
             last_layer_variances[i] = last_layer_variances[i] / (float)(D_MODEL);
         }
         
+        // 最后做 layer norm，保持与训练图中的注意力块输出分布一致。
         // perform layer norm (2x16) x (16)
         for (i = 0; i < NUM_TOKENS; i++) {
             for (j = 0; j < D_MODEL; j++) {
@@ -257,8 +260,9 @@ void singleHeadAttention() {
 """
 
 
-# 保存或更新 `controller_entry` 的值。
 controller_entry = """
+// 这是板载控制器入口模板。
+// 它把 Crazyflie 当前状态重组为和训练观测兼容的 state_array，再调用导出的网络求四电机推力。
 static control_t_n control_n;
 static struct mat33 rot;
 static float state_array[18];
@@ -286,6 +290,8 @@ void controllerNN(control_t *control,
 	float omega_pitch = radians(sensors->gyro.y);
 	float omega_yaw = radians(sensors->gyro.z);
 
+	// 这里构造的状态向量顺序必须和训练时 self observation 的布局保持兼容，
+	// 否则导出的模型在板载端读取到的输入语义会错位。
 	// the state vector
 	state_array[0] = state->position.x - setpoint->position.x;
 	state_array[1] = state->position.y - setpoint->position.y;
@@ -308,9 +314,11 @@ void controllerNN(control_t *control,
 	state_array[18] = state->position.z;
 
 
+	// 板载侧的 `networkEvaluate` 是由导出流程根据训练模型权重生成的纯 C 推理函数。
 	// run the neural neural network
 	networkEvaluate(&control_n, state_array);
 
+	// 最后一步把网络输出推力转成固件实际消费的 PWM/电机比率。
 	// convert thrusts to directly to PWM
 	// need to hack the firmware (stablizer.c and power_distribution_stock.c)
 	int PWM_0, PWM_1, PWM_2, PWM_3; 
@@ -373,7 +381,6 @@ void thrusts2PWM(struct control_t_n *control_n,
 
 """
 
-# 保存或更新 `log_group` 的值。
 log_group = """
 
 LOG_GROUP_START(ctrlNN)
@@ -385,7 +392,6 @@ LOG_GROUP_STOP(ctrlNN)
 
 """
 
-# 保存或更新 `single_drone_eval` 的值。
 single_drone_eval = """
 
 int main(const float *indatav, size_t size, float *outdatav)
@@ -403,7 +409,6 @@ int main(const float *indatav, size_t size, float *outdatav)
 
 """
 
-# 保存或更新 `single_drone_obst_eval` 的值。
 single_drone_obst_eval = """
 
 int main(const float *indatav, size_t size, float *outdatav)
@@ -423,7 +428,6 @@ int main(const float *indatav, size_t size, float *outdatav)
 
 """
 
-# 保存或更新 `multi_drone_attn_eval` 的值。
 multi_drone_attn_eval = """
 
 int main(const float *self_indatav, const float *nbr_indatav, float *obst_indatav, float *nbr_outdata, float *obst_outdata, float *token1_out, float *token2_out, float *outdatav)

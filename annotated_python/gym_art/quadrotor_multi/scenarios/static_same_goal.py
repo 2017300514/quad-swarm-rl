@@ -1,18 +1,14 @@
-# 中文注释副本；原始文件：gym_art/quadrotor_multi/scenarios/static_same_goal.py
-# 说明：为避免修改源码，本文件仅作为阅读辅助材料。
-
-# 导入当前模块依赖。
 from gym_art.quadrotor_multi.scenarios.base import QuadrotorScenario
 
+# 这是最简单的同目标静态场景。
+# episode 开始后 goals 不再变化，策略只需要学会从不同初始状态收敛到固定编队目标。
 
-# 定义类 `Scenario_static_same_goal`。
+
 class Scenario_static_same_goal(QuadrotorScenario):
-    # 定义函数 `update_formation_size`。
     def update_formation_size(self, new_formation_size):
-        # 当前代码块暂时不执行实际逻辑。
+        # 这个场景没有在 episode 中途动态改编队尺寸的需求，因此留空。
         pass
 
-    # 定义函数 `step`。
     def step(self):
-        # 返回当前函数的结果。
+        # 静态目标场景每步不额外修改 goal，环境只沿用 reset 时生成的目标点。
         return

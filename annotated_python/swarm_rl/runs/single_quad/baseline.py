@@ -1,15 +1,15 @@
 # 中文注释副本；原始文件：swarm_rl/runs/single_quad/baseline.py
 # 说明：为避免修改源码，本文件仅作为阅读辅助材料。
+# 该文件属于单机实验配置，用于验证基础飞行控制与奖励设计，而不是完整的多机协同避障。
+# 其参数会流入训练入口，决定单机环境、模型和日志行为。
 
-# 导入当前模块依赖。
+# 下面这组导入把当前模块会消费的环境组件、训练接口或数值工具集中拉进来；真正重要的是后续它们怎样参与数据流。
 from sample_factory.launcher.run_description import RunDescription, Experiment, ParamGrid
 
-# 保存或更新 `_params` 的值。
 _params = ParamGrid([
     ('quads_collision_reward', [5.0]),
 ])
 
-# 保存或更新 `QUAD_BASELINE_CLI` 的值。
 QUAD_BASELINE_CLI = (
     'python -m swarm_rl.train --env=quadrotor_multi --train_for_env_steps=1000000000 --algo=APPO --use_rnn=False '
     '--num_workers=2 --num_envs_per_worker=8 --learning_rate=0.0001 --ppo_clip_value=5.0 --recurrence=1 '
@@ -23,12 +23,10 @@ QUAD_BASELINE_CLI = (
 )
 
 
-# 保存或更新 `_experiment` 的值。
 _experiment = Experiment(
     'quad_mix_baseline-8_mixed',
     QUAD_BASELINE_CLI,
     _params.generate_params(randomize=False),
 )
 
-# 保存或更新 `RUN_DESCRIPTION` 的值。
 RUN_DESCRIPTION = RunDescription('quads_multi_mix_baseline_8a_local_v116', experiments=[_experiment])
