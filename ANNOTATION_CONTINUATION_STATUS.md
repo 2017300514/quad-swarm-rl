@@ -147,30 +147,86 @@
 - `paper/attn_heatmap.py` 中论文注意力热力图的矩阵来源与对比意图
 - `paper/fps_compare.py` 中仿真吞吐量柱状图怎样对比 QuadSwarm 与 gym-pybullet-drones
 - `paper/mean_std_plots_quad_obstacle.py` 中障碍实验 TensorBoard 日志怎样被聚合成四联图
+- `paper/mean_std_plots_quad_compare_arch.py` 中 attention / deepsets / mlp 三组架构日志怎样被聚合成统一对比图
+- `paper/mean_std_plots_quad_obstacle_compare_arch_density.py` 中不同 obstacle density 分组怎样影响成功率、碰撞率和目标距离曲线
+- `paper/mean_std_plots_quad_obstacle_compare_arch_neighbor.py` 中不同 neighbor budget 分组怎样影响障碍实验的四类主指标
 
 ## 5. 还未处理的重点文件
 
 下一批应优先继续下面三个文件：
 
-1. `annotated_python/paper/attn_heatmap.py`
-2. `annotated_python/paper/fps_compare.py`
-3. `annotated_python/paper/mean_std_plots_quad_obstacle.py`
+1. `annotated_python/paper/mean_std_plots_quad_baseline.py`
+2. `annotated_python/paper/mean_std_plots_quad_annealing.py`
+3. `annotated_python/paper/mean_std_plots_quad_obstacle_ablation.py`
 
 原因：
 
-- 当前环境主链、场景链和障碍场景链已经基本补齐
-- 现在更适合转向 `paper/` 目录，因为这些脚本正好承接前面训练与评估链路，解释论文图是如何从日志和统计量生成的
-- `attn_heatmap.py` 适合先做，因为它最短、最直接对应注意力模型分析
-- `fps_compare.py` 是独立 benchmark 图
-- `mean_std_plots_quad_obstacle.py` 是障碍实验结果聚合主脚本
+- 当前 `paper/` 目录已经补到 compare 系列，继续顺着剩余 `mean_std_plots_*` 聚合脚本推进，最容易保持注释口径一致
+- `mean_std_plots_quad_baseline.py` 与 `mean_std_plots_quad_annealing.py` 承接无障碍主实验与奖励/退火分析
+- `mean_std_plots_quad_obstacle_ablation.py` 承接障碍实验中的组件消融对比，和刚完成的 density / neighbor 图逻辑最接近
 
 之后建议顺序：
 
-1. `annotated_python/paper/attn_heatmap.py`
-2. `annotated_python/paper/fps_compare.py`
-3. `annotated_python/paper/mean_std_plots_quad_obstacle.py`
-4. 其余 `paper/mean_std_plots_*` 与可视化脚本
-5. 剩余测试、可视化零散文件
+1. `annotated_python/paper/mean_std_plots_quad_baseline.py`
+2. `annotated_python/paper/mean_std_plots_quad_annealing.py`
+3. `annotated_python/paper/mean_std_plots_quad_obstacle_ablation.py`
+4. `annotated_python/paper/mean_std_plots_quad_scale.py`
+5. `annotated_python/paper/mean_std_plots_quad_obstacle_num_agents.py`
+6. 剩余测试、可视化零散文件
+
+## 5.1 本轮实际注释顺序摘要
+
+为了保证前后注释口径一致，本轮人工重写实际遵循的是“主链先打通，再沿分支往外扩，再回到论文脚本”的顺序，而不是单纯按目录字母序：
+
+1. 训练入口与环境包装：
+   `train.py` -> `quadrotor_params.py` -> `quad_utils.py` -> `reward_shaping.py`
+2. 多机环境主链：
+   `quadrotor_single.py` -> `quadrotor_multi.py` -> `quadrotor_dynamics.py` -> `quadrotor_control.py`
+3. 障碍物、碰撞与回放支链：
+   `obstacles.py` -> `obstacles/utils.py` -> `collisions/obstacles.py` -> `collisions/quadrotors.py` -> `quad_experience_replay.py`
+4. 模型与部署支链：
+   `quad_multi_model.py` -> `attention_layer.py` -> `sensor_noise.py` -> `collisions/utils.py` ->
+   `sim2real/code_blocks.py` -> `sim2real/sim2real.py` -> `sim2real/torch_models/__init__.py` ->
+   `sim2real/c_models/__init__.py` -> `sim2real/tests/unit_tests.py` -> `get_state.py` ->
+   `collisions/room.py` -> `aerodynamics/downwash.py` -> `quad_utils.py`
+5. 场景主链：
+   `scenarios/base.py` -> `scenarios/utils.py` -> `quadrotor_randomization.py` -> `scenarios/mix.py`
+6. 普通场景变体：
+   `dynamic_same_goal.py` -> `static_same_goal.py` -> `swap_goals.py` -> `run_away.py` ->
+   `swarm_vs_swarm.py` -> `dynamic_diff_goal.py` -> `dynamic_formations.py` -> `static_diff_goal.py`
+7. 轨迹场景与入口：
+   `ep_rand_bezier.py` -> `ep_lissajous3D.py` -> `scenarios/__init__.py`
+8. 障碍场景分支：
+   `obstacles/o_base.py` -> `obstacles/o_random.py` -> `test/o_test.py` ->
+   `obstacles/o_static_same_goal.py` -> `obstacles/o_dynamic_same_goal.py` ->
+   `obstacles/o_swap_goals.py` -> `obstacles/o_ep_rand_bezier.py` -> `test/__init__.py`
+9. 论文分析脚本：
+   `attn_heatmap.py` -> `fps_compare.py` -> `mean_std_plots_quad_obstacle.py` ->
+   `mean_std_plots_quad_compare_arch.py` -> `mean_std_plots_quad_obstacle_compare_arch_density.py` ->
+   `mean_std_plots_quad_obstacle_compare_arch_neighbor.py`
+
+这个顺序的核心原则是：
+
+- 先把“训练配置 -> 环境主循环 -> 观测/奖励/碰撞 -> 模型”打通
+- 再去注释场景文件，否则很难解释 `goal`、`spawn_points`、`distance_to_goal` 是怎样被外层环境消费的
+- 最后回到 `paper/`，这样才能把作图脚本和前面的训练日志、统计量、场景指标链路接起来
+
+## 5.2 下一次继续时的推荐顺序
+
+如果下一次继续，建议不要跳着做，而是按下面顺序推进剩余 `paper/` 文件：
+
+1. `annotated_python/paper/mean_std_plots_quad_baseline.py`
+2. `annotated_python/paper/mean_std_plots_quad_annealing.py`
+3. `annotated_python/paper/mean_std_plots_quad_obstacle_ablation.py`
+4. `annotated_python/paper/mean_std_plots_quad_scale.py`
+5. `annotated_python/paper/mean_std_plots_quad_obstacle_num_agents.py`
+
+推荐理由：
+
+- 这几份脚本和刚完成的 compare 系列最相邻，数据流、缓存、插值、平滑、均值/标准差带的逻辑最容易复用
+- `baseline` 与 `annealing` 先做，可以把无障碍主实验和奖励退火逻辑补完整
+- `obstacle_ablation`、`scale`、`num_agents` 再跟进，可以把障碍实验横向对比链补齐
+- 这样收完以后，`paper/` 目录只会剩少量零散可视化脚本，断点最清楚
 
 ## 6. 当前有效注释风格
 

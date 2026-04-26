@@ -200,9 +200,28 @@
   - 障碍环境里的 Bezier 轨迹场景怎样把共享移动目标迁移到 obstacle map 约束下
   - 论文分析脚本怎样把硬编码分析矩阵、benchmark 数据和 TensorBoard 日志重新组织成最终论文图
 - 下一批计划：
-  - `annotated_python/paper/mean_std_plots_quad_compare_arch.py`
-  - `annotated_python/paper/mean_std_plots_quad_obstacle_compare_arch_density.py`
-  - `annotated_python/paper/mean_std_plots_quad_obstacle_compare_arch_neighbor.py`
+  - `annotated_python/paper/mean_std_plots_quad_baseline.py`
+  - `annotated_python/paper/mean_std_plots_quad_annealing.py`
+  - `annotated_python/paper/mean_std_plots_quad_obstacle_ablation.py`
+
+### 5.2 建议保留的续做顺序
+
+为了避免下一次续做时重新梳理上下文，建议明确记住这条顺序：
+
+1. 先完成剩余 `paper/mean_std_plots_*` 主脚本：
+   `mean_std_plots_quad_baseline.py` ->
+   `mean_std_plots_quad_annealing.py` ->
+   `mean_std_plots_quad_obstacle_ablation.py` ->
+   `mean_std_plots_quad_scale.py` ->
+   `mean_std_plots_quad_obstacle_num_agents.py`
+2. 再回头处理少量零散可视化或测试文件。
+
+这样安排的原因不是目录顺序，而是语义连续性：
+
+- 刚完成的 `quad_obstacle`、`compare_arch`、`compare_arch_density`、`compare_arch_neighbor`
+  已经把 TensorBoard 聚合、缓存、插值、平滑、图例组织的主套路说明清楚了
+- 下一批脚本沿用同一套套路，最适合在当前记忆仍然完整时一口气补齐
+- 等这条线收尾后，再做剩余零散文件，返工成本最低
 
 ## 6. 论文《Collision Avoidance and Navigation for a Quadrotor Swarm Using End-to-end Deep Reinforcement Learning》对应源码说明
 
@@ -252,6 +271,20 @@
 
 ## 7. 当前人工注释进度补充
 
-- 已完成的环境基础补充文件还包括 `annotated_python/gym_art/quadrotor_multi/aerodynamics/downwash.py`、`annotated_python/gym_art/quadrotor_multi/quad_utils.py`，以及一批场景层文件：`base.py`、`utils.py`、`mix.py`、`dynamic_same_goal.py`、`static_same_goal.py`、`swap_goals.py`、`run_away.py`、`swarm_vs_swarm.py`、`dynamic_diff_goal.py`、`dynamic_formations.py`、`static_diff_goal.py`、`ep_rand_bezier.py`、`ep_lissajous3D.py`、`__init__.py`、`obstacles/o_base.py`、`obstacles/o_random.py`、`test/o_test.py`、`obstacles/o_static_same_goal.py`、`obstacles/o_dynamic_same_goal.py`、`obstacles/o_swap_goals.py`、`obstacles/o_ep_rand_bezier.py`、`test/__init__.py`，以及 `paper/attn_heatmap.py`、`paper/fps_compare.py`、`paper/mean_std_plots_quad_obstacle.py`。
+- 已完成的环境基础补充文件还包括 `annotated_python/gym_art/quadrotor_multi/aerodynamics/downwash.py`、`annotated_python/gym_art/quadrotor_multi/quad_utils.py`，以及一批场景层文件：`base.py`、`utils.py`、`mix.py`、`dynamic_same_goal.py`、`static_same_goal.py`、`swap_goals.py`、`run_away.py`、`swarm_vs_swarm.py`、`dynamic_diff_goal.py`、`dynamic_formations.py`、`static_diff_goal.py`、`ep_rand_bezier.py`、`ep_lissajous3D.py`、`__init__.py`、`obstacles/o_base.py`、`obstacles/o_random.py`、`test/o_test.py`、`obstacles/o_static_same_goal.py`、`obstacles/o_dynamic_same_goal.py`、`obstacles/o_swap_goals.py`、`obstacles/o_ep_rand_bezier.py`、`test/__init__.py`，以及 `paper/attn_heatmap.py`、`paper/fps_compare.py`、`paper/mean_std_plots_quad_obstacle.py`、`paper/mean_std_plots_quad_compare_arch.py`、`paper/mean_std_plots_quad_obstacle_compare_arch_density.py`、`paper/mean_std_plots_quad_obstacle_compare_arch_neighbor.py`。
 - 这意味着主链已经从训练入口一路覆盖到环境、场景、障碍任务和一部分论文分析图脚本。
-- 下一批更适合继续沿 `paper/mean_std_plots_*` 系列推进，把主要实验汇总图脚本补齐。
+- 下一批更适合继续沿 `paper/mean_std_plots_*` 系列推进，先补 `mean_std_plots_quad_baseline.py`、`mean_std_plots_quad_annealing.py` 和 `mean_std_plots_quad_obstacle_ablation.py`。
+
+### 7.1 下次打开 Codex 的调用方式
+
+下次如果要无缝续做，建议直接在仓库根目录打开 Codex 后发送一条类似下面的消息：
+
+```text
+/memories 请继续这个工作空间之前的注释工作。先读取 ANNOTATION_AND_PAPER_GUIDE.md 和 ANNOTATION_CONTINUATION_STATUS.md，按文档里记录的当前注释顺序与下一批推荐顺序继续。当前优先目标是 annotated_python/paper/mean_std_plots_quad_baseline.py、annotated_python/paper/mean_std_plots_quad_annealing.py、annotated_python/paper/mean_std_plots_quad_obstacle_ablation.py。仍然只允许修改 annotated_python/ 和文档，不要改源码目录。
+```
+
+如果想更短，也可以直接用：
+
+```text
+/memories 继续 quad-swarm-rl 的中文人工注释工作，先读 ANNOTATION_AND_PAPER_GUIDE.md 和 ANNOTATION_CONTINUATION_STATUS.md，然后按文档继续下一批。
+```
