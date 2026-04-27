@@ -254,25 +254,40 @@
   - `quadrotor_visualization.py` 怎样把单机动力学状态、goal、追踪/侧视相机和 scene graph 组装成第三人称回放与第一人称观测渲染链
   - `quadrotor_multi_visualization.py` 怎样统一调度多机 goal、障碍物、碰撞球、路径尾迹、速度/加速度箭头和键盘切视角逻辑
   - `rendering3d.py` 怎样作为底层 OpenGL/pyglet 渲染框架，提供 window/FBO target、camera、scene graph、程序纹理和基础几何 primitive
+- 本批继续新增覆盖：
+  - `swarm_rl/env_wrappers/compatibility.py` 怎样把旧式四元组多机环境接口兼容成 Gymnasium / Sample Factory 期望的 terminated-truncated step API
+  - `swarm_rl/env_wrappers/tests/test_quads.py` 怎样把组件注册、训练配置解析、环境创建和多步 rollout 这条入口链做成冒烟测试
+  - `gym_art/quadrotor_multi/tests/test_numba_opt.py` 怎样同时比较环境 step 吞吐、动力学 `step1` 和传感器噪声路径在 python / numba 两条实现上的一致性
+  - `gym_art/quadrotor_multi/tests/test_multi_env.py` 怎样统一验证多机环境基础 step、渲染、本地观测和 replay wrapper 链路
+- 本批继续新增覆盖：
+  - `obstacles/test/unit_test.py` 怎样直接对拍 9 维局部 SDF、障碍碰撞索引和 obstacle 栅格中心枚举这三条基础几何约定
+  - `obstacles/test/speed_test.py` 怎样用 `timeit` 盯住 `get_cell_centers` 这个 obstacle 采样热点的最小性能回归
+  - `collisions/test/unit_test/obstacles.py` 与 `collisions/test/unit_test/quadrotor.py` 怎样分别验证障碍反弹法向/法向速度，以及多机碰撞矩阵/pair 列表/距离表输出
+- 本批继续新增覆盖：
+  - `collisions/test/speed_test/quadrotor.py` 怎样把朴素 python 版碰撞响应和正式 `perform_collision_between_drones` 放到同一组输入上做微型性能对比
+  - `plots/plot_v_value_1d.py` 怎样把手工导出的单变量 critic value 切片画成 1D 散点图，并在标题里标出最大值所在坐标
+  - 一组残余 `__init__.py` 入口文件怎样分别只承担包命名空间、测试子包入口或子模块组织点，而不承载真实训练/仿真逻辑
+- 本批继续新增覆盖：
+  - `swarm_rl/runs/quad_multi_mix_baseline.py` 怎样把 8-agent `mix` 场景基线的 APPO、attention 邻居观测、碰撞惩罚和 replay/anneal 配置打包成 launcher CLI 模板
+  - `swarm_rl/runs/quad_multi_mix_baseline_attn_8.py` 怎样完全复用该基线 CLI，只在 launcher 层展开多 seed 和带时间戳的运行名
 - 下一批计划：
-  - 继续处理其余零散可视化、测试或辅助工具文件，优先 `swarm_rl/env_wrappers/compatibility.py`、`swarm_rl/env_wrappers/tests/test_quads.py`、`gym_art/quadrotor_multi/tests/test_numba_opt.py`、`gym_art/quadrotor_multi/tests/test_multi_env.py`
+  - 如果还要继续把风格完全抹平，优先 `gym_art/quadrotor_multi/plots/plot_v_value_2d.py`、`plot_v_value_3d.py`、`plot_v_value_4d.py`，然后清扫 `rendering3d.py` 尾段仍残留旧模板句式的 helper / primitive 区域
 
 ### 5.2 建议保留的续做顺序
 
 为了避免下一次续做时重新梳理上下文，建议明确记住这条顺序：
 
 1. 先补和评估/调试直接相连的零散可视化或工具文件：
-   `swarm_rl/env_wrappers/compatibility.py` ->
-   `swarm_rl/env_wrappers/tests/test_quads.py` ->
-   `gym_art/quadrotor_multi/tests/test_numba_opt.py` ->
-   `gym_art/quadrotor_multi/tests/test_multi_env.py`
+   `gym_art/quadrotor_multi/plots/plot_v_value_2d.py` ->
+   `gym_art/quadrotor_multi/plots/plot_v_value_3d.py` ->
+   `gym_art/quadrotor_multi/plots/plot_v_value_4d.py`
 2. 再回头处理剩余测试或底层可视化尾项。
 
 这样安排的原因不是目录顺序，而是语义连续性：
 
-- 刚补完的单机/多机/底层 3D 渲染链已经把可视化主线说明清楚了
-- 下一步最顺的是把 env wrapper 兼容层和测试脚本补齐，这样“训练包装 -> 环境 -> 渲染/验证”这一圈更完整
-- 等这些零散测试尾项收尾后，再去扫剩下的小文件，返工成本最低
+- 刚补完 `quad_multi_mix_baseline*.py` 之后，主训练链、场景链、论文图、可视化链和大部分测试链都已经有了人工语义注释
+- 如果还继续做，收益最高的是把几份早期 `plot_v_value_*` 离线脚本的文件头也统一掉，再顺手清掉 `rendering3d.py` 尾段 helper 里的少量旧模板句式
+- 如果不追求把每一个小 helper 都逐一磨平，现在也已经可以视为主批次基本收尾
 
 ## 6. 论文《Collision Avoidance and Navigation for a Quadrotor Swarm Using End-to-end Deep Reinforcement Learning》对应源码说明
 
@@ -327,13 +342,17 @@
 - `paper/mean_std_plots_*` 这条连续主线已经补齐；下一批更适合转去剩余测试、零散可视化或其它尚未人工重写的小文件。
 - `swarm_rl/runs/obstacles/` 和 `swarm_rl/runs/single_quad/` 这两组配置链已经补到较完整状态；下一批更适合转去零散测试、可视化或辅助工具文件。
 - `quadrotor_visualization.py`、`quadrotor_multi_visualization.py`、`rendering3d.py` 这一整条 3D 渲染链已经补齐；下一批可以顺着去处理 env wrapper 兼容层和剩余测试脚本。
+- `compatibility.py`、`test_quads.py`、`test_numba_opt.py`、`test_multi_env.py` 这一组包装层与基础测试链也已经补齐；下一批可以顺着转去 obstacle / collision 的单元测试尾项。
+- `obstacles/test/unit_test.py`、`obstacles/test/speed_test.py`、`collisions/test/unit_test/obstacles.py`、`collisions/test/unit_test/quadrotor.py` 这组 obstacle / collision 验证脚本也已经补齐；下一批可以转去 collision 性能测试、`plot_v_value_1d.py` 和残余 `__init__.py`。
+- `collisions/test/speed_test/quadrotor.py`、`plots/plot_v_value_1d.py` 和当前仓库里残余的 `__init__.py` 入口文件也已经补齐；下一批更适合收掉 `quad_multi_mix_baseline*.py` 这两份 launcher 配置尾项。
+- `quad_multi_mix_baseline.py` 和 `quad_multi_mix_baseline_attn_8.py` 这两份 launcher 配置尾项也已经补齐；后续如果还继续，更像是在做少量风格统一清扫，而不是补主线缺口。
 
 ### 7.1 下次打开 Codex 的调用方式
 
 下次如果要无缝续做，建议直接在仓库根目录打开 Codex 后发送一条类似下面的消息：
 
 ```text
-/memories 请继续这个工作空间之前的注释工作。先读取 ANNOTATION_AND_PAPER_GUIDE.md 和 ANNOTATION_CONTINUATION_STATUS.md，按文档里记录的当前注释顺序与下一批推荐顺序继续。当前优先目标改为 `swarm_rl/env_wrappers/compatibility.py`、`swarm_rl/env_wrappers/tests/test_quads.py`、`gym_art/quadrotor_multi/tests/test_numba_opt.py`、`gym_art/quadrotor_multi/tests/test_multi_env.py`。仍然只允许修改 annotated_python/ 和文档，不要改源码目录。
+/memories 请继续这个工作空间之前的注释工作。先读取 ANNOTATION_AND_PAPER_GUIDE.md 和 ANNOTATION_CONTINUATION_STATUS.md，按文档里记录的当前注释顺序与下一批推荐顺序继续。当前优先目标改为 `gym_art/quadrotor_multi/plots/plot_v_value_2d.py`、`plot_v_value_3d.py`、`plot_v_value_4d.py`，然后按需清扫 `rendering3d.py` 尾段仍残留旧模板句式的 helper。仍然只允许修改 annotated_python/ 和文档，不要改源码目录。
 ```
 
 如果想更短，也可以直接用：

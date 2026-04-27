@@ -1,24 +1,22 @@
 # 中文注释副本；原始文件：gym_art/quadrotor_multi/collisions/test/unit_test/quadrotor.py
 # 说明：为避免修改源码，本文件仅作为阅读辅助材料。
 # 该文件处理机体、障碍物或房间边界的碰撞几何与碰撞后状态更新，是训练中安全相关奖励和终止判定的重要来源。
-# 这里的输出会回流到动力学状态、奖励项和碰撞统计中。
+# 这里的测试针对多机碰撞检测的底层输出：
+# 哪些无人机被标成发生碰撞、哪些 agent pair 被记录下来，以及两两距离表是否完整。
 
-# 下面这组导入把当前模块会消费的环境组件、训练接口或数值工具集中拉进来；真正重要的是后续它们怎样参与数据流。
 import numpy as np
 
-# 下面这组导入把当前模块会消费的环境组件、训练接口或数值工具集中拉进来；真正重要的是后续它们怎样参与数据流。
 from gym_art.quadrotor_multi.collisions.quadrotors import calculate_collision_matrix
 
 
-# `test_calculate_collision_matrix` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
+# 这里故意让前 7 架无人机挤在同一点，最后 1 架远离，
+# 这样真值矩阵非常容易手算，适合检查 pairwise collision 扫描是否仍然正确。
 def test_calculate_collision_matrix():
     positions = np.ones((8, 3))
     positions[7][0] = 3
     positions[7][1] = 3
     positions[7][2] = 6
-    # 实际碰撞阈值不是裸半径，而是按机臂长度缩放得到，确保不同尺寸动力学参数下碰撞判定仍有物理一致性。
     collision_threshold = 0.2
-    # 该值来自实验配置，决定环境一次并行维护多少架无人机；后续会影响观测拼接尺寸、邻居筛选范围和碰撞矩阵规模。
     num_agents = 8
 
     item_num = int(num_agents * (num_agents - 1) / 2)
@@ -46,29 +44,26 @@ def test_calculate_collision_matrix():
     true_curr_drone_collisions = np.delete(true_curr_drone_collisions, np.unique(
         np.where(true_curr_drone_collisions == [-1000, -1000])[0]), axis=0)
 
-    # 这里不是业务逻辑本身，而是在守护运行假设，避免非法配置或异常状态把后续训练流程带偏。
     assert test_drone_col_matrix.all() == true_drone_col_matrix.all()
 
+    # pair 列表不要求排序完全一致，但要求检测出的每一对都真的在手算真值里。
     for i in range(len(test_curr_drone_collisions)):
         if test_curr_drone_collisions[i] not in true_curr_drone_collisions:
             raise ValueError
 
-    # 这里不是业务逻辑本身，而是在守护运行假设，避免非法配置或异常状态把后续训练流程带偏。
     assert test_distance_matrix.all() == true_distance_matrix.all()
 
     # print('drone_col_matrix:    ', drone_col_matrix)
     # print('curr_drone_collisions:    ', curr_drone_collisions)
     # print('distance_matrix:    ', distance_matrix)
 
-    # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
     return
 
 
-# `unit_test` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
+# 手工运行时的总入口。
 def unit_test():
     test_calculate_collision_matrix()
     print('Pass unit test!')
-    # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
     return
 
 

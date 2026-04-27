@@ -1,30 +1,27 @@
 # 中文注释副本；原始文件：gym_art/quadrotor_multi/collisions/test/speed_test/quadrotor.py
 # 说明：为避免修改源码，本文件仅作为阅读辅助材料。
-# 该文件处理机体、障碍物或房间边界的碰撞几何与碰撞后状态更新，是训练中安全相关奖励和终止判定的重要来源。
-# 这里的输出会回流到动力学状态、奖励项和碰撞统计中。
+# 这个文件是多机碰撞响应函数的微型性能对比脚本。
+# 它把一个“朴素 python 复写版”与正式 `perform_collision_between_drones` 放到相同输入上，
+# 只比较每次碰撞响应的耗时，不负责验证环境级行为。
 
-# 下面这组导入把当前模块会消费的环境组件、训练接口或数值工具集中拉进来；真正重要的是后续它们怎样参与数据流。
 import sys
 import timeit
 import numpy as np
 
-# 下面这组导入把当前模块会消费的环境组件、训练接口或数值工具集中拉进来；真正重要的是后续它们怎样参与数据流。
 from gym_art.quadrotor_multi.collisions.quadrotors import compute_col_norm_and_new_velocities
 from gym_art.quadrotor_multi.collisions.utils import compute_new_vel, compute_new_omega
 
 
-# `normal_perform_collision_between_drones` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
+# 这里手写了一份与正式实现逻辑等价、但不追求优化的参考版本，
+# 用来给下面的 `timeit` 提供 baseline。
 def normal_perform_collision_between_drones(pos1, vel1, omega1, pos2, vel2, omega2):
-    # Solve for the new velocities using the elastic collision equations.
-    # vel noise has two different random components,
-    # One that preserves momentum in opposite directions
-    # Second that does not preserve momentum
+    # 先按弹性碰撞几何求出法向速度交换，再叠加论文实现里用于打散对称碰撞的随机扰动。
     v1new, v2new, collision_norm = compute_col_norm_and_new_velocities(pos1, vel1, pos2, vel2)
     vel_change = (v2new - v1new) * collision_norm
     dyn1_vel_shift = vel_change
     dyn2_vel_shift = -vel_change
 
-    # Make sure new vel direction would be opposite to the original vel direction
+    # 这里反复采样扰动，直到碰后速度沿碰撞法向的方向确实分离，而不是继续互相挤压。
     for _ in range(3):
         cons_rand_val = np.random.normal(loc=0, scale=0.8, size=3)
         vel1_noise = cons_rand_val + np.random.normal(loc=0, scale=0.15, size=3)
@@ -39,21 +36,20 @@ def normal_perform_collision_between_drones(pos1, vel1, omega1, pos2, vel2, omeg
         if dyn1_new_vel_dir > 0 > dyn2_new_vel_dir:
             break
 
-    # Get new vel
+    # 线速度和角速度的最终裁剪/扰动仍然复用正式工具函数，避免把 benchmark 写成另一套物理规则。
     max_vel_magn = max(np.linalg.norm(vel1), np.linalg.norm(vel2))
     vel1 = compute_new_vel(max_vel_magn=max_vel_magn, vel=vel1, vel_shift=dyn1_vel_shift)
     vel2 = compute_new_vel(max_vel_magn=max_vel_magn, vel=vel2, vel_shift=dyn2_vel_shift)
 
-    # Get new omega
     new_omega = compute_new_omega()
     omega1 += new_omega
     omega2 -= new_omega
 
-    # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
     return vel1, omega1, vel2, omega2
 
 
-# `test_perform_collision_between_drones` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
+# 先 benchmark 参考实现，再 benchmark 正式实现。
+# 两边输入完全相同，这样输出的均值能直接作为“优化前后碰撞响应开销”的粗略对照。
 def test_perform_collision_between_drones():
     SETUP_CODE = '''from __main__ import normal_perform_collision_between_drones; import numpy as np'''
 
@@ -83,10 +79,9 @@ def test_perform_collision_between_drones():
     print('Mean:   ', np.mean(times[1:]))
 
 
-# `speed_test` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
+# 手工运行入口。
 def speed_test():
     test_perform_collision_between_drones()
-    # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
     return
 
 

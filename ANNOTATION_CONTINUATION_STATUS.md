@@ -98,6 +98,24 @@
 - [annotated_python/swarm_rl/env_wrappers/tests/test_quads.py](/home/server2/sui_work_not_delete/quad-swarm-rl/annotated_python/swarm_rl/env_wrappers/tests/test_quads.py:1)
 - [annotated_python/gym_art/quadrotor_multi/tests/test_numba_opt.py](/home/server2/sui_work_not_delete/quad-swarm-rl/annotated_python/gym_art/quadrotor_multi/tests/test_numba_opt.py:1)
 - [annotated_python/gym_art/quadrotor_multi/tests/test_multi_env.py](/home/server2/sui_work_not_delete/quad-swarm-rl/annotated_python/gym_art/quadrotor_multi/tests/test_multi_env.py:1)
+- [annotated_python/gym_art/quadrotor_multi/obstacles/test/unit_test.py](/home/server2/sui_work_not_delete/quad-swarm-rl/annotated_python/gym_art/quadrotor_multi/obstacles/test/unit_test.py:1)
+- [annotated_python/gym_art/quadrotor_multi/obstacles/test/speed_test.py](/home/server2/sui_work_not_delete/quad-swarm-rl/annotated_python/gym_art/quadrotor_multi/obstacles/test/speed_test.py:1)
+- [annotated_python/gym_art/quadrotor_multi/collisions/test/unit_test/obstacles.py](/home/server2/sui_work_not_delete/quad-swarm-rl/annotated_python/gym_art/quadrotor_multi/collisions/test/unit_test/obstacles.py:1)
+- [annotated_python/gym_art/quadrotor_multi/collisions/test/unit_test/quadrotor.py](/home/server2/sui_work_not_delete/quad-swarm-rl/annotated_python/gym_art/quadrotor_multi/collisions/test/unit_test/quadrotor.py:1)
+- [annotated_python/gym_art/quadrotor_multi/collisions/test/speed_test/quadrotor.py](/home/server2/sui_work_not_delete/quad-swarm-rl/annotated_python/gym_art/quadrotor_multi/collisions/test/speed_test/quadrotor.py:1)
+- [annotated_python/gym_art/quadrotor_multi/plots/plot_v_value_1d.py](/home/server2/sui_work_not_delete/quad-swarm-rl/annotated_python/gym_art/quadrotor_multi/plots/plot_v_value_1d.py:1)
+- [annotated_python/swarm_rl/__init__.py](/home/server2/sui_work_not_delete/quad-swarm-rl/annotated_python/swarm_rl/__init__.py:1)
+- [annotated_python/swarm_rl/models/__init__.py](/home/server2/sui_work_not_delete/quad-swarm-rl/annotated_python/swarm_rl/models/__init__.py:1)
+- [annotated_python/swarm_rl/env_wrappers/__init__.py](/home/server2/sui_work_not_delete/quad-swarm-rl/annotated_python/swarm_rl/env_wrappers/__init__.py:1)
+- [annotated_python/swarm_rl/env_wrappers/tests/__init__.py](/home/server2/sui_work_not_delete/quad-swarm-rl/annotated_python/swarm_rl/env_wrappers/tests/__init__.py:1)
+- [annotated_python/gym_art/quadrotor_multi/__init__.py](/home/server2/sui_work_not_delete/quad-swarm-rl/annotated_python/gym_art/quadrotor_multi/__init__.py:1)
+- [annotated_python/gym_art/quadrotor_multi/aerodynamics/__init__.py](/home/server2/sui_work_not_delete/quad-swarm-rl/annotated_python/gym_art/quadrotor_multi/aerodynamics/__init__.py:1)
+- [annotated_python/gym_art/quadrotor_multi/obstacles/__init__.py](/home/server2/sui_work_not_delete/quad-swarm-rl/annotated_python/gym_art/quadrotor_multi/obstacles/__init__.py:1)
+- [annotated_python/gym_art/quadrotor_multi/obstacles/test/__init__.py](/home/server2/sui_work_not_delete/quad-swarm-rl/annotated_python/gym_art/quadrotor_multi/obstacles/test/__init__.py:1)
+- [annotated_python/gym_art/quadrotor_multi/plots/__init__.py](/home/server2/sui_work_not_delete/quad-swarm-rl/annotated_python/gym_art/quadrotor_multi/plots/__init__.py:1)
+- [annotated_python/gym_art/quadrotor_multi/tests/__init__.py](/home/server2/sui_work_not_delete/quad-swarm-rl/annotated_python/gym_art/quadrotor_multi/tests/__init__.py:1)
+- [annotated_python/swarm_rl/runs/quad_multi_mix_baseline.py](/home/server2/sui_work_not_delete/quad-swarm-rl/annotated_python/swarm_rl/runs/quad_multi_mix_baseline.py:1)
+- [annotated_python/swarm_rl/runs/quad_multi_mix_baseline_attn_8.py](/home/server2/sui_work_not_delete/quad-swarm-rl/annotated_python/swarm_rl/runs/quad_multi_mix_baseline_attn_8.py:1)
 
 ## 4. 已完成内容概述
 
@@ -193,6 +211,15 @@
 - `swarm_rl/env_wrappers/tests/test_quads.py` 中组件注册、训练配置解析、环境创建与多步 rollout 这条 Sample Factory 入口链怎样被做成冒烟测试
 - `gym_art/quadrotor_multi/tests/test_numba_opt.py` 中环境 step 吞吐、动力学 `step1` 和传感器噪声路径怎样对拍 python 实现与 numba 实现
 - `gym_art/quadrotor_multi/tests/test_multi_env.py` 中基础多机环境、渲染、本地观测和 replay wrapper 几条常用测试链怎样被统一验证
+- `obstacles/test/unit_test.py` 中 9 维局部 SDF、无人机-障碍碰撞索引和 obstacle 网格中心枚举怎样被手工真值对拍
+- `obstacles/test/speed_test.py` 中 `get_cell_centers` 这个 obstacle 采样热点怎样用 `timeit` 做最小性能回归检查
+- `collisions/test/unit_test/obstacles.py` 中障碍碰撞的反弹法向与法向速度分量怎样被几何构型直接验证
+- `collisions/test/unit_test/quadrotor.py` 中多机碰撞检测输出的 agent 标记、碰撞 pair 列表和距离表怎样被手工真值矩阵对拍
+- `collisions/test/speed_test/quadrotor.py` 中朴素 python 版碰撞响应与正式 `perform_collision_between_drones` 怎样被放到同一组输入上做微型性能对比
+- `plots/plot_v_value_1d.py` 中离线手工导出的单变量 critic value 曲线怎样被快速画成 1D 散点图，并标出最大 value 所在位置
+- 多个残余 `__init__.py` 入口文件怎样分别充当包命名空间、测试子包入口或子模块组织点，而不是承载真实训练/仿真逻辑
+- `swarm_rl/runs/quad_multi_mix_baseline.py` 中 8-agent `mix` 场景基线怎样把一整套 APPO、attention 邻居观测、碰撞惩罚和 replay/anneal 配置固化成 launcher CLI 模板
+- `swarm_rl/runs/quad_multi_mix_baseline_attn_8.py` 中多 seed 版本怎样完全复用前一个基线 CLI，只在 launcher 层展开 seed 和带时间戳的运行名
 
 ## 5. 还未处理的重点文件
 
@@ -262,17 +289,17 @@
 
 如果下一次继续，建议不要跳着做，而是按下面顺序推进剩余零散文件：
 
-1. `gym_art/quadrotor_multi/obstacles/test/unit_test.py`
-2. `gym_art/quadrotor_multi/obstacles/test/speed_test.py`
-3. `gym_art/quadrotor_multi/collisions/test/unit_test/obstacles.py`
-4. `gym_art/quadrotor_multi/collisions/test/unit_test/quadrotor.py`
-5. 其余剩余测试、可视化零散文件
+1. `gym_art/quadrotor_multi/plots/plot_v_value_2d.py`
+2. `gym_art/quadrotor_multi/plots/plot_v_value_3d.py`
+3. `gym_art/quadrotor_multi/plots/plot_v_value_4d.py`
+4. `gym_art/quadrotor_multi/rendering3d.py` 中仍残留旧模板注释的小段 helper / primitive 区域
+5. 若不再追求极致统一，可视为主批次已基本收尾
 
 推荐理由：
 
-- 环境包装层与基础测试链已经补齐，下一步最顺的是把障碍物与碰撞相关的单元/速度测试一起收尾
-- `obstacles/test/*` 紧挨着前面已做过的 `obstacles.py` 与 `obstacles/utils.py`，上下文最连续
-- `collisions/test/unit_test/*` 则正好接在已做过的 `collisions/obstacles.py` 与 `collisions/quadrotors.py` 后面，能把验证链补完整
+- `quad_multi_mix_baseline*.py` 这两份 launcher 配置尾项已经补齐
+- 现在剩下的主要是少量“文件头仍偏泛化”或 `rendering3d.py` 局部 helper 区域还留着旧模板句式的副本，不再阻塞主线理解
+- 如果后续还继续做，最值得补的是 `plot_v_value_2d/3d/4d.py` 这些早期离线可视化脚本的文件头统一，以及 `rendering3d.py` 尾段 helper 的风格清扫
 
 ## 6. 当前有效注释风格
 
