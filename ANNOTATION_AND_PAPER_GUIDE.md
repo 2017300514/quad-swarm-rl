@@ -173,6 +173,31 @@
   - `annotated_python/paper/attn_heatmap.py`
   - `annotated_python/paper/fps_compare.py`
   - `annotated_python/paper/mean_std_plots_quad_obstacle.py`
+  - `annotated_python/paper/mean_std_plots_quad_baseline.py`
+  - `annotated_python/paper/mean_std_plots_quad_annealing.py`
+  - `annotated_python/paper/mean_std_plots_quad_obstacle_ablation.py`
+  - `annotated_python/paper/mean_std_plots_quad_scale.py`
+  - `annotated_python/paper/mean_std_plots_quad_obstacle_num_agents.py`
+  - `annotated_python/swarm_rl/runs/obstacles/quad_obstacle_baseline.py`
+  - `annotated_python/swarm_rl/runs/obstacles/quads_multi_obstacles.py`
+  - `annotated_python/swarm_rl/runs/obstacles/quads_multi_obstacles_nei_encoder_search.py`
+  - `annotated_python/swarm_rl/runs/obstacles/pbt_quads_multi_obstacles.py`
+  - `annotated_python/swarm_rl/runs/obstacles/obst_density_random.py`
+  - `annotated_python/swarm_rl/runs/obstacles/obst_domain_random.py`
+  - `annotated_python/swarm_rl/runs/obstacles/obst_size_random.py`
+  - `annotated_python/swarm_rl/runs/single_quad/baseline.py`
+  - `annotated_python/swarm_rl/runs/single_quad/single_quad.py`
+  - `annotated_python/swarm_rl/env_wrappers/v_value_map.py`
+  - `annotated_python/gym_art/quadrotor_multi/tests/plot_v_value.py`
+  - `annotated_python/gym_art/quadrotor_multi/tests/plot_v_value_2d.py`
+  - `annotated_python/gym_art/quadrotor_multi/tests/plot_v_value_3d.py`
+  - `annotated_python/gym_art/quadrotor_multi/tests/plot_v_value_4d.py`
+  - `annotated_python/swarm_rl/enjoy.py`
+  - `annotated_python/swarm_rl/models/weight_recycler.py`
+  - `annotated_python/swarm_rl/utils.py`
+  - `annotated_python/gym_art/quadrotor_multi/inertia.py`
+  - `annotated_python/gym_art/quadrotor_multi/numba_utils.py`
+  - `annotated_python/gym_art/quadrotor_multi/quad_models.py`
 - 本批重点覆盖：
   - 训练入口如何把环境注册、模型注册和两阶段配置解析接到 Sample Factory
   - 四旋翼实验参数如何分别流向观测、奖励、障碍物、回放、场景和 sim2real 链路
@@ -199,29 +224,55 @@
   - 障碍同目标静态/动态场景和障碍目标交换场景怎样把普通场景逻辑迁移到 obstacle map 约束下
   - 障碍环境里的 Bezier 轨迹场景怎样把共享移动目标迁移到 obstacle map 约束下
   - 论文分析脚本怎样把硬编码分析矩阵、benchmark 数据和 TensorBoard 日志重新组织成最终论文图
+- 本批新增覆盖：
+  - 无障碍 baseline 图如何把总回报、平均目标距离、机间碰撞率和飞行时长占比从 TensorBoard 标量还原成论文四联图
+  - 奖励退火 / replay 对比脚本如何按实验分组聚合多条 run，并把三种训练设置并排落到同一张 2x2 图上
+  - 障碍环境消融脚本如何把默认配置、障碍观测改写、自注意力和 replay 四组结果做 EMA 平滑后统一对比成功率、碰撞率与到目标距离
+- 本批继续新增覆盖：
+  - 不同 swarm 规模主实验脚本如何把多组训练 run 汇总成目标距离与机间碰撞率的两联图
+  - 障碍环境里不同 agent 数量脚本如何用统一的 EMA 与平滑流程比较成功率、碰撞率和两类目标距离
+- 本批继续新增覆盖：
+  - 障碍主实验的 baseline 命令模板怎样把论文里的回放、退火、障碍观测与基础训练预算固化成可复用 CLI
+  - 最终 attention 配置、neighbor encoder 搜索与 PBT 版本怎样在 baseline 之上只覆写少数关键超参
+  - obstacle density / size / domain randomization 三个配置脚本怎样分别控制障碍地图统计特征的采样范围
+- 本批继续新增覆盖：
+  - 单机 baseline 模板怎样把多机环境退化成 `quads_num_agents=1` 的基础飞行训练配置
+  - 单机实验入口怎样在 baseline 之上只展开多 seed，并保持更偏本地验证的 WandB 设置
+- 本批继续新增覆盖：
+  - `V_ValueMapWrapper` 怎样围绕当前观测做 21x21 局部 x/y 扰动，并把 critic 的 value map 作为第二张图拼到 `rgb_array` 渲染结果旁边
+  - `tests/plot_v_value_2d.py` 怎样把 wrapper 采样出的局部 value 栅格光栅化成 RGB 热图，并在标题里标出当前最大 value 的平面位置
+  - `plot_v_value.py`、`plot_v_value_3d.py`、`plot_v_value_4d.py` 怎样作为离线 debugger 辅助脚本，分别检查 critic 在 1D/2D/3D 局部切片上的价值函数形状
+- 本批继续新增覆盖：
+  - `swarm_rl/enjoy.py` 怎样复用训练期注册与配置解析逻辑，把已有 checkpoint 切到 Sample Factory 的评估 rollout 入口
+  - `swarm_rl/models/weight_recycler.py` 怎样把激活张量压缩成逐神经元平均绝对激活分数，供上层判断哪些通道长期沉寂
+  - `swarm_rl/utils.py` 怎样统一生成带时间戳的产物名，以及多 seed 实验常用的随机 seed 列表
+- 本批继续新增覆盖：
+  - `inertia.py` 怎样把机体模板拆成 body / payload / arms / motors / props 若干部件，重算整机 COM，并通过旋转惯量加平行轴定理装配总惯量张量
+  - `numba_utils.py` 怎样给动力学热点运算补上 numba 兼容的 `clip`、推力映射、叉乘和 OU 噪声实现
+  - `quad_models.py` 怎样集中给出 Crazyflie、默认大机体、中型机体和低惯量 Crazyflie 的统一参数模板
+- 本批继续新增覆盖：
+  - `quadrotor_visualization.py` 怎样把单机动力学状态、goal、追踪/侧视相机和 scene graph 组装成第三人称回放与第一人称观测渲染链
+  - `quadrotor_multi_visualization.py` 怎样统一调度多机 goal、障碍物、碰撞球、路径尾迹、速度/加速度箭头和键盘切视角逻辑
+  - `rendering3d.py` 怎样作为底层 OpenGL/pyglet 渲染框架，提供 window/FBO target、camera、scene graph、程序纹理和基础几何 primitive
 - 下一批计划：
-  - `annotated_python/paper/mean_std_plots_quad_baseline.py`
-  - `annotated_python/paper/mean_std_plots_quad_annealing.py`
-  - `annotated_python/paper/mean_std_plots_quad_obstacle_ablation.py`
+  - 继续处理其余零散可视化、测试或辅助工具文件，优先 `swarm_rl/env_wrappers/compatibility.py`、`swarm_rl/env_wrappers/tests/test_quads.py`、`gym_art/quadrotor_multi/tests/test_numba_opt.py`、`gym_art/quadrotor_multi/tests/test_multi_env.py`
 
 ### 5.2 建议保留的续做顺序
 
 为了避免下一次续做时重新梳理上下文，建议明确记住这条顺序：
 
-1. 先完成剩余 `paper/mean_std_plots_*` 主脚本：
-   `mean_std_plots_quad_baseline.py` ->
-   `mean_std_plots_quad_annealing.py` ->
-   `mean_std_plots_quad_obstacle_ablation.py` ->
-   `mean_std_plots_quad_scale.py` ->
-   `mean_std_plots_quad_obstacle_num_agents.py`
-2. 再回头处理少量零散可视化或测试文件。
+1. 先补和评估/调试直接相连的零散可视化或工具文件：
+   `swarm_rl/env_wrappers/compatibility.py` ->
+   `swarm_rl/env_wrappers/tests/test_quads.py` ->
+   `gym_art/quadrotor_multi/tests/test_numba_opt.py` ->
+   `gym_art/quadrotor_multi/tests/test_multi_env.py`
+2. 再回头处理剩余测试或底层可视化尾项。
 
 这样安排的原因不是目录顺序，而是语义连续性：
 
-- 刚完成的 `quad_obstacle`、`compare_arch`、`compare_arch_density`、`compare_arch_neighbor`
-  已经把 TensorBoard 聚合、缓存、插值、平滑、图例组织的主套路说明清楚了
-- 下一批脚本沿用同一套套路，最适合在当前记忆仍然完整时一口气补齐
-- 等这条线收尾后，再做剩余零散文件，返工成本最低
+- 刚补完的单机/多机/底层 3D 渲染链已经把可视化主线说明清楚了
+- 下一步最顺的是把 env wrapper 兼容层和测试脚本补齐，这样“训练包装 -> 环境 -> 渲染/验证”这一圈更完整
+- 等这些零散测试尾项收尾后，再去扫剩下的小文件，返工成本最低
 
 ## 6. 论文《Collision Avoidance and Navigation for a Quadrotor Swarm Using End-to-end Deep Reinforcement Learning》对应源码说明
 
@@ -273,14 +324,16 @@
 
 - 已完成的环境基础补充文件还包括 `annotated_python/gym_art/quadrotor_multi/aerodynamics/downwash.py`、`annotated_python/gym_art/quadrotor_multi/quad_utils.py`，以及一批场景层文件：`base.py`、`utils.py`、`mix.py`、`dynamic_same_goal.py`、`static_same_goal.py`、`swap_goals.py`、`run_away.py`、`swarm_vs_swarm.py`、`dynamic_diff_goal.py`、`dynamic_formations.py`、`static_diff_goal.py`、`ep_rand_bezier.py`、`ep_lissajous3D.py`、`__init__.py`、`obstacles/o_base.py`、`obstacles/o_random.py`、`test/o_test.py`、`obstacles/o_static_same_goal.py`、`obstacles/o_dynamic_same_goal.py`、`obstacles/o_swap_goals.py`、`obstacles/o_ep_rand_bezier.py`、`test/__init__.py`，以及 `paper/attn_heatmap.py`、`paper/fps_compare.py`、`paper/mean_std_plots_quad_obstacle.py`、`paper/mean_std_plots_quad_compare_arch.py`、`paper/mean_std_plots_quad_obstacle_compare_arch_density.py`、`paper/mean_std_plots_quad_obstacle_compare_arch_neighbor.py`。
 - 这意味着主链已经从训练入口一路覆盖到环境、场景、障碍任务和一部分论文分析图脚本。
-- 下一批更适合继续沿 `paper/mean_std_plots_*` 系列推进，先补 `mean_std_plots_quad_baseline.py`、`mean_std_plots_quad_annealing.py` 和 `mean_std_plots_quad_obstacle_ablation.py`。
+- `paper/mean_std_plots_*` 这条连续主线已经补齐；下一批更适合转去剩余测试、零散可视化或其它尚未人工重写的小文件。
+- `swarm_rl/runs/obstacles/` 和 `swarm_rl/runs/single_quad/` 这两组配置链已经补到较完整状态；下一批更适合转去零散测试、可视化或辅助工具文件。
+- `quadrotor_visualization.py`、`quadrotor_multi_visualization.py`、`rendering3d.py` 这一整条 3D 渲染链已经补齐；下一批可以顺着去处理 env wrapper 兼容层和剩余测试脚本。
 
 ### 7.1 下次打开 Codex 的调用方式
 
 下次如果要无缝续做，建议直接在仓库根目录打开 Codex 后发送一条类似下面的消息：
 
 ```text
-/memories 请继续这个工作空间之前的注释工作。先读取 ANNOTATION_AND_PAPER_GUIDE.md 和 ANNOTATION_CONTINUATION_STATUS.md，按文档里记录的当前注释顺序与下一批推荐顺序继续。当前优先目标是 annotated_python/paper/mean_std_plots_quad_baseline.py、annotated_python/paper/mean_std_plots_quad_annealing.py、annotated_python/paper/mean_std_plots_quad_obstacle_ablation.py。仍然只允许修改 annotated_python/ 和文档，不要改源码目录。
+/memories 请继续这个工作空间之前的注释工作。先读取 ANNOTATION_AND_PAPER_GUIDE.md 和 ANNOTATION_CONTINUATION_STATUS.md，按文档里记录的当前注释顺序与下一批推荐顺序继续。当前优先目标改为 `swarm_rl/env_wrappers/compatibility.py`、`swarm_rl/env_wrappers/tests/test_quads.py`、`gym_art/quadrotor_multi/tests/test_numba_opt.py`、`gym_art/quadrotor_multi/tests/test_multi_env.py`。仍然只允许修改 annotated_python/ 和文档，不要改源码目录。
 ```
 
 如果想更短，也可以直接用：

@@ -1,9 +1,9 @@
 # 中文注释副本；原始文件：gym_art/quadrotor_multi/rendering3d.py
 # 说明：为避免修改源码，本文件仅作为阅读辅助材料。
-# 该文件属于多机四旋翼仿真环境的一部分，负责环境状态、物理过程或配套工具中的某一环。
-# 它的上游通常来自场景配置、动力学状态或训练动作，下游会流向观测构造、奖励结算、碰撞处理或可视化。
+# 这是整个 quadrotor 可视化体系的底层 OpenGL/pyglet 框架。
+# 上层 `quadrotor_visualization.py` 和 `quadrotor_multi_visualization.py` 负责决定“场景里有什么”，
+# 本文件负责把这些场景节点、相机和 target 真正画到窗口或离屏 RGB buffer 上。
 
-# 下面开始文件或代码块自带的文档字符串；如果源码作者已经解释设计意图，应优先结合它理解上下文。
 """
 3D rendering framework
 """
@@ -56,28 +56,24 @@ except ImportError as e:
 import math
 import numpy as np
 
-# `get_display` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
+# Linux 下支持按 display spec 选具体 X display；别的平台通常直接返回默认 display。
 def get_display(spec):
-    # 下面的文档字符串通常由源码作者提供，用来补充模块职责、输入输出约束或使用方式。
     """Convert a display specification (such as :0) into an actual Display
     object.
 
     pyglet only supports multiple Displays on Linux.
     """
     if spec is None:
-        # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
         return None
     elif isinstance(spec, six.string_types):
-        # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
         return pyglet.canvas.Display(spec)
     else:
         raise error.Error('Invalid display specification: {}. (Must be a string like :0 or None.)'.format(spec))
 
 # TODO can we get some of this from Pyglet?
-# `FBOTarget` 是当前文件暴露的核心类型，它负责维护与该模块职责直接相关的长期状态。
+# `FBOTarget` 封装离屏渲染目标。
+# 上层拿它来生成 `rgb_array` 或第一人称观测图像，不需要真实窗口。
 class FBOTarget(object):
-    # 初始化阶段会把实验配置翻译成环境内部状态，包括单机实例、观测裁剪边界、碰撞阈值、障碍物和日志缓存。
-    # 这些状态会在后续每个 step 中被不断读取和更新，因此这里决定了环境运行时的数据布局。
     def __init__(self, width, height):
 
         shape = (width, height, 3)
@@ -106,36 +102,31 @@ class FBOTarget(object):
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
             GL_TEXTURE_2D, self.tex, 0)
 
-        # test - ok to comment out?
+        # FBO 不完整的话后面的读像素都会是错的，所以这里直接硬断言。
         draw_buffers = (GLenum * 1)(GL_COLOR_ATTACHMENT0)
         glDrawBuffers(1, draw_buffers)
-        # 这里不是业务逻辑本身，而是在守护运行假设，避免非法配置或异常状态把后续训练流程带偏。
         assert glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE
 
         self.fb_array = np.zeros(shape, dtype=np.uint8)
 
-    # `bind` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
+    # 开始把后续 draw 输出导向当前 FBO。
     def bind(self):
         glBindFramebuffer(GL_FRAMEBUFFER, self.fbo)
         draw_buffers = (GLenum * 1)(GL_COLOR_ATTACHMENT0)
         glDrawBuffers(1, draw_buffers)
         glViewport(0, 0, *self.shape[:2])
 
-    # `finish` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
+    # 把 GPU color attachment 读回预分配的 numpy buffer。
     def finish(self):
         glReadPixels(0, 0, self.shape[1], self.shape[0],
             GL_RGB, GL_UNSIGNED_BYTE, self.fb_array.ctypes.data)
 
-    # `read` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
     def read(self):
-        # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
         return self.fb_array
 
 
-# `WindowTarget` 是当前文件暴露的核心类型，它负责维护与该模块职责直接相关的长期状态。
+# `WindowTarget` 封装真实 pyglet 窗口，给 `human` 模式交互回放使用。
 class WindowTarget(object):
-    # 初始化阶段会把实验配置翻译成环境内部状态，包括单机实例、观测裁剪边界、碰撞阈值、障碍物和日志缓存。
-    # 这些状态会在后续每个 step 中被不断读取和更新，因此这里决定了环境运行时的数据布局。
     def __init__(self, width, height, display=None, resizable=True):
 
         is_travis = 'TRAVIS' in os.environ
@@ -147,24 +138,22 @@ class WindowTarget(object):
             config = Config(double_buffer=True, depth_size=16, sample_buffers=1, samples=antialiasing_x)
 
         display = get_display(display)
-        # vsync is set to false to speed up FBO-only renders, we enable before draw
+        # 这里显式关掉 vsync，避免渲染速度被屏幕刷新率卡住。
         self.window = pyglet.window.Window(display=display,
             width=width, height=height, resizable=resizable, # style=pyglet.window.Window.WINDOW_STYLE_BORDERLESS,
             visible=True, vsync=False, config=config
         )
         self.window.on_close = self.close
         self.shape = (width, height, 3)
-        # `on_resize` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
         def on_resize(w, h):
             self.shape = (w, h, 3)
         if resizable:
             self.window.on_resize = on_resize
 
-    # `close` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
     def close(self):
         self.window.close()
 
-    # `bind` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
+    # 把 OpenGL context 切到这个窗口，并同步视口尺寸。
     def bind(self):
         self.window.switch_to()
         # self.window.set_vsync(True)
@@ -177,16 +166,13 @@ class WindowTarget(object):
             glViewport(0, 0, self.window.width, self.window.height)
         glBindFramebuffer(GL_FRAMEBUFFER, 0)
 
-    # `location` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
     def location(self):
-        # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
         return self.window.get_location()
 
-    # `set_location` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
     def set_location(self, x, y):
         self.window.set_location(x, y)
 
-    # `draw_axes` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
+    # 只给 global 视图的调试用坐标轴。
     def draw_axes(self):
         # define the axes vertices and colors
         axes = pyglet.graphics.vertex_list(3,
@@ -196,28 +182,23 @@ class WindowTarget(object):
         # draw the axes
         axes.draw(pyglet.gl.GL_LINES)
 
-    # `finish` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
     def finish(self):
         self.window.flip()
         # self.window.set_vsync(False)
 
 
-# `Camera` 是当前文件暴露的核心类型，它负责维护与该模块职责直接相关的长期状态。
+# `Camera` 只做一件事：保存上层给出的 look-at 参数，并在 draw 前把它编成 OpenGL 投影/视图矩阵。
 class Camera(object):
-    # 初始化阶段会把实验配置翻译成环境内部状态，包括单机实例、观测裁剪边界、碰撞阈值、障碍物和日志缓存。
-    # 这些状态会在后续每个 step 中被不断读取和更新，因此这里决定了环境运行时的数据布局。
     def __init__(self, fov):
         self.fov = fov
         self.lookat = None
 
-    # `look_at` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
     def look_at(self, eye, target, up):
         self.lookat = (eye, target, up)
 
     # TODO other ways to set the view matrix
 
-    # private
-    # `_matrix` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
+    # 真正把相机参数写入当前 OpenGL context。
     def _matrix(self, shape):
         aspect = float(shape[0]) / shape[1]
         znear = 0.1
@@ -228,8 +209,6 @@ class Camera(object):
 
         glMatrixMode(GL_MODELVIEW)
         glLoadIdentity()
-        # will make sense once more than one way of setting view matrix
-        # 这里不是业务逻辑本身，而是在守护运行假设，避免非法配置或异常状态把后续训练流程带偏。
         assert sum([x is not None for x in (self.lookat,)]) < 2
 
         if self.lookat is not None:
@@ -238,10 +217,8 @@ class Camera(object):
 
 
 # TODO we can add user-controlled lighting, etc. to this
-# `Scene` 是当前文件暴露的核心类型，它负责维护与该模块职责直接相关的长期状态。
+# `Scene` 是已经 build 完成的批次集合，加上统一背景色和灯光配置。
 class Scene(object):
-    # 初始化阶段会把实验配置翻译成环境内部状态，包括单机实例、观测裁剪边界、碰撞阈值、障碍物和日志缓存。
-    # 这些状态会在后续每个 step 中被不断读取和更新，因此这里决定了环境运行时的数据布局。
     def __init__(self, batches, bgcolor=(0,0,0)):
         self.batches = batches
         self.bgcolor = bgcolor
@@ -250,8 +227,7 @@ class Scene(object):
         self.lights = [np.array([np.cos(t), np.sin(t), 0.0, 0.0])
             for t in 0.2 + np.linspace(0, 2*np.pi, 4)[:-1]]
 
-    # call only once GL context is ready
-    # `initialize` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
+    # 只在 GL context 准备好之后调用一次，设置平滑着色和固定光源。
     def initialize(self):
         glShadeModel(GL_SMOOTH)
         glEnable(GL_LIGHTING)
@@ -271,7 +247,7 @@ class Scene(object):
             glEnable(GL_LIGHT0 + i)
 
 
-# `draw` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
+# 一次完整的绘制调用顺序：bind target -> 清屏 -> 设置相机矩阵 -> 画所有 batch -> finish target。
 def draw(scene, camera, target):
 
     target.bind() # sets viewport
@@ -296,9 +272,9 @@ def draw(scene, camera, target):
     target.finish()
 
 
-# `SceneNode` 是当前文件暴露的核心类型，它负责维护与该模块职责直接相关的长期状态。
+# 下列 `SceneNode` / `Transform` / `Color` / `ProceduralTexture` 共同组成一个很轻量的 scene graph。
+# 上层代码操作这些节点，而不是直接写 OpenGL 命令。
 class SceneNode(object):
-    # `_build_children` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
     def _build_children(self, batch):
         # hack - should go somewhere else
         if not isinstance(self.children, type([])):
@@ -306,111 +282,89 @@ class SceneNode(object):
         for c in self.children:
             c.build(batch, self.pyg_grp)
 
-    # default impl
-    # `collide_sphere` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
+    # 默认把碰撞测试递归转发给子节点。
     def collide_sphere(self, x, radius):
-        # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
         return any(c.collide_sphere(x, radius) for c in self.children)
 
-# `World` 是当前文件暴露的核心类型，它负责维护与该模块职责直接相关的长期状态。
+# `World` 只是场景树的根节点。
 class World(SceneNode):
-    # 初始化阶段会把实验配置翻译成环境内部状态，包括单机实例、观测裁剪边界、碰撞阈值、障碍物和日志缓存。
-    # 这些状态会在后续每个 step 中被不断读取和更新，因此这里决定了环境运行时的数据布局。
     def __init__(self, children):
         self.children = children
         self.pyg_grp = None
 
-    # `build` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
     def build(self, batch):
         #batch.add(3, GL_LINES, None, ('v2f', (0, 0, 5, 0, 0, 5)))
         self._build_children(batch)
 
-# `Transform` 是当前文件暴露的核心类型，它负责维护与该模块职责直接相关的长期状态。
+# `Transform` 是上层最常用的节点类型。
+# 它包住一组子几何，并允许后续用 `set_transform*` 持续更新位姿。
 class Transform(SceneNode):
-    # 初始化阶段会把实验配置翻译成环境内部状态，包括单机实例、观测裁剪边界、碰撞阈值、障碍物和日志缓存。
-    # 这些状态会在后续每个 step 中被不断读取和更新，因此这里决定了环境运行时的数据布局。
     def __init__(self, transform, children):
         self.t = transform
         self.mat_inv = np.linalg.inv(transform)
         self.children = children
 
-    # `build` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
     def build(self, batch, parent):
         self.pyg_grp = _PygTransform(self.t, parent=parent)
         self._build_children(batch)
-        # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
         return self.pyg_grp
 
-    # `set_transform` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
+    # 常规更新路径，同时刷新逆矩阵，保证碰撞查询仍然正确。
     def set_transform(self, t):
         self.pyg_grp.set_matrix(t)
         self.mat_inv = np.linalg.inv(t)
 
-    # `set_transform_nocollide` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
+    # 只改渲染矩阵，不维护碰撞逆矩阵，适合那些不参与碰撞判断的纯视觉物体。
     def set_transform_nocollide(self, t):
         self.pyg_grp.set_matrix(t)
 
-    # `set_transform_and_color` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
+    # 碰撞球、轨迹点等调试物经常要同时改位姿和颜色，因此这里提供合并更新。
     def set_transform_and_color(self, t, rgba):
         self.pyg_grp.set_matrix(t)
         for child in self.children:
             child.set_rgba(rgba[0], rgba[1], rgba[2], rgba[3])
 
-    # `collide_sphere` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
+    # 先把世界坐标球体映射到本地坐标系，再让下层 primitive 做简化碰撞检测。
     def collide_sphere(self, x, radius):
         xh = [x[0], x[1], x[2], 1]
         xlocal = np.matmul(self.mat_inv, xh)[:3]
         rlocal = radius * self.mat_inv[0,0]
-        # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
         return any(c.collide_sphere(xlocal, rlocal) for c in self.children)
 
-# `BackToFront` 是当前文件暴露的核心类型，它负责维护与该模块职责直接相关的长期状态。
+# `BackToFront` 用 pyglet 的 ordered group 显式控制透明物体的绘制顺序。
 class BackToFront(SceneNode):
-    # 初始化阶段会把实验配置翻译成环境内部状态，包括单机实例、观测裁剪边界、碰撞阈值、障碍物和日志缓存。
-    # 这些状态会在后续每个 step 中被不断读取和更新，因此这里决定了环境运行时的数据布局。
     def __init__(self, children):
         self.children = children
 
-    # `build` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
     def build(self, batch, parent):
         self.pyg_grp = pyglet.graphics.Group(parent=parent)
         for i, c in enumerate(self.children):
             ordering = pyglet.graphics.OrderedGroup(i, parent=self.pyg_grp)
             c.build(batch, ordering)
-        # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
         return self.pyg_grp
 
-# `Color` 是当前文件暴露的核心类型，它负责维护与该模块职责直接相关的长期状态。
+# `Color` 节点把固定材质颜色压到一棵子树上。
 class Color(SceneNode):
-    # 初始化阶段会把实验配置翻译成环境内部状态，包括单机实例、观测裁剪边界、碰撞阈值、障碍物和日志缓存。
-    # 这些状态会在后续每个 step 中被不断读取和更新，因此这里决定了环境运行时的数据布局。
     def __init__(self, color, children):
         self.color = color
         self.children = children
 
-    # `build` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
     def build(self, batch, parent):
         self.pyg_grp = _PygColor(self.color, parent=parent)
         self._build_children(batch)
-        # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
         return self.pyg_grp
 
-    # `set_rgb` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
     def set_rgb(self, r, g, b):
         self.pyg_grp.set_rgb(r, g, b)
 
-    # `set_rgba` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
     def set_rgba(self, r, g, b, a):
         self.pyg_grp.set_rgba(r, g, b, a)
 
-# `transform_and_color` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
+# 两个 helper 让上层更容易用“几何 + 颜色 + 位姿”快速搭 scene。
 def transform_and_color(transform, color, children):
-    # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
     return Transform(transform, Color(color, children))
 
-# `transform_and_dual_color` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
 def transform_and_dual_color(transform, color_1, color_2, children_1, children_2):
-    # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
     return Transform(transform, [Color(color_1, children_1), Color(color_2, children_2)])
 
 TEX_CHECKER = 0
@@ -420,15 +374,12 @@ TEX_NOISE_PERLIN = 3
 TEX_OILY = 4
 TEX_VORONOI = 5
 
-# `random_textype` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
 def random_textype():
-    # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
     return np.random.randint(TEX_VORONOI + 1)
 
-# `ProceduralTexture` 是当前文件暴露的核心类型，它负责维护与该模块职责直接相关的长期状态。
+# `ProceduralTexture` 负责在 CPU 上生成纹理，再绑定给子几何。
+# 地板、墙面这类大面积参照物都依赖它，否则画面缺少空间层次。
 class ProceduralTexture(SceneNode):
-    # 初始化阶段会把实验配置翻译成环境内部状态，包括单机实例、观测裁剪边界、碰撞阈值、障碍物和日志缓存。
-    # 这些状态会在后续每个 step 中被不断读取和更新，因此这里决定了环境运行时的数据布局。
     def __init__(self, style, scale, children):
         self.children = children
         # linear is default, those w/ nearest must overwrite
@@ -444,7 +395,6 @@ class ProceduralTexture(SceneNode):
             self.mag_filter = GL_NEAREST
         elif style == TEX_NOISE_GAUSSIAN:
             nz = np.random.normal(size=(256,256))
-            # 这里按 observation space 上下界裁剪邻居观测，避免极端数值破坏网络训练时的输入尺度。
             image = np.clip(nz, -3, 3)
         elif style == TEX_NOISE_PERLIN:
             t = np.linspace(0, 1, 256)
@@ -483,12 +433,10 @@ class ProceduralTexture(SceneNode):
         _scale_to_inplace(image, low, high)
         self.tex = _np2tex(image)
 
-    # `build` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
     def build(self, batch, parent):
         self.pyg_grp = _PygTexture(tex=self.tex,
             mag_filter=self.mag_filter, parent=parent)
         self._build_children(batch)
-        # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
         return self.pyg_grp
 
 
@@ -496,77 +444,56 @@ class ProceduralTexture(SceneNode):
 # these functions return 4x4 rotation matrix suitable to construct Transform
 # or to mutate Transform via set_matrix
 #
-# `scale` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
+# 这几个 helper 统一返回 4x4 齐次变换矩阵，供上层组合出位姿。
 def scale(s):
-    # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
     return np.diag([s, s, s, 1.0])
 
-# `translate` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
 def translate(x):
     r = np.eye(4)
     r[:3,3] = x
-    # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
     return r
 
-# `trans_and_rot` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
 def trans_and_rot(t, r):
     m = np.eye(4)
     m[:3,:3] = r
     m[:3,3] = t
-    # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
     return m
 
-# `rotz` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
 def rotz(theta):
     r = np.eye(4)
     r[:2,:2] = _rot2d(theta)
-    # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
     return r
 
-# `roty` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
 def roty(theta):
     r = np.eye(4)
     r2d = _rot2d(theta)
     r[[0,0,2,2],[0,2,0,2]] = _rot2d(theta).flatten()
-    # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
     return r
 
-# `rotx` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
 def rotx(theta):
     r = np.eye(4)
     r[1:3,1:3] = _rot2d(theta)
-    # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
     return r
 
-# `_PygTransform` 是当前文件暴露的核心类型，它负责维护与该模块职责直接相关的长期状态。
+# 下面几个 `_Pyg*` group 是 scene node 和 pyglet/OpenGL 之间的胶水层。
 class _PygTransform(pyglet.graphics.Group):
-    # 初始化阶段会把实验配置翻译成环境内部状态，包括单机实例、观测裁剪边界、碰撞阈值、障碍物和日志缓存。
-    # 这些状态会在后续每个 step 中被不断读取和更新，因此这里决定了环境运行时的数据布局。
     def __init__(self, transform=np.eye(4), parent=None):
         super().__init__(parent)
         self.set_matrix(transform)
 
-    # `set_matrix` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
     def set_matrix(self, transform):
-        # 这里不是业务逻辑本身，而是在守护运行假设，避免非法配置或异常状态把后续训练流程带偏。
         assert transform.shape == (4, 4)
-        # 这里不是业务逻辑本身，而是在守护运行假设，避免非法配置或异常状态把后续训练流程带偏。
         assert np.all(transform[3,:] == [0, 0, 0, 1])
         self.matrix_raw = (GLfloat * 16)(*transform.T.flatten())
 
-    # `set_state` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
     def set_state(self):
         glPushMatrix()
         glMultMatrixf(self.matrix_raw)
 
-    # `unset_state` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
     def unset_state(self):
         glPopMatrix()
 
-# `_PygColor` 是当前文件暴露的核心类型，它负责维护与该模块职责直接相关的长期状态。
 class _PygColor(pyglet.graphics.Group):
-    # 初始化阶段会把实验配置翻译成环境内部状态，包括单机实例、观测裁剪边界、碰撞阈值、障碍物和日志缓存。
-    # 这些状态会在后续每个 step 中被不断读取和更新，因此这里决定了环境运行时的数据布局。
     def __init__(self, color, parent=None):
         super().__init__(parent)
         if len(color) == 3:
@@ -574,18 +501,16 @@ class _PygColor(pyglet.graphics.Group):
         else:
             self.set_rgba(*color)
 
-    # `set_rgb` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
     def set_rgb(self, r, g, b):
         self.set_rgba(r, g, b, 1.0)
 
-    # `set_rgba` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
     def set_rgba(self, r, g, b, a):
         self.dcolor = (GLfloat * 4)(r, g, b, a)
         spec_whiteness = 0.8
         r, g, b = (1.0 - spec_whiteness) * np.array([r, g, b]) + spec_whiteness
         self.scolor = (GLfloat * 4)(r, g, b, a)
 
-    # `set_state` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
+    # 这里把 rgba 颜色翻成 OpenGL 材质与透明混合状态。
     def set_state(self):
         if self.dcolor[-1] < 1.0:
             glEnable(GL_BLEND)
@@ -595,15 +520,11 @@ class _PygColor(pyglet.graphics.Group):
         glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, self.scolor)
         glMaterialfv(GL_FRONT_AND_BACK, GL_SHININESS, (GLfloat)(8.0))
 
-    # `unset_state` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
     def unset_state(self):
         if self.dcolor[-1] < 1.0:
             glDisable(GL_BLEND)
 
-# `_PygTexture` 是当前文件暴露的核心类型，它负责维护与该模块职责直接相关的长期状态。
 class _PygTexture(pyglet.graphics.Group):
-    # 初始化阶段会把实验配置翻译成环境内部状态，包括单机实例、观测裁剪边界、碰撞阈值、障碍物和日志缓存。
-    # 这些状态会在后续每个 step 中被不断读取和更新，因此这里决定了环境运行时的数据布局。
     def __init__(self, tex, mag_filter, parent=None):
         super().__init__(parent=parent)
 
@@ -615,36 +536,29 @@ class _PygTexture(pyglet.graphics.Group):
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, mag_filter)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR)
 
-        # anisotropic texturing helps a lot with checkerboard floors
+        # 各向异性过滤能明显改善斜视角地板纹理的锯齿感。
         anisotropy = (GLfloat)()
         glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, anisotropy)
         glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, anisotropy)
 
-    # `set_state` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
     def set_state(self):
         glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE, (GLfloat * 4)(1,1,1,1))
         glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, (GLfloat * 4)(1,1,1,1))
         glEnable(self.tex.target)
         glBindTexture(self.tex.target, self.tex.id)
 
-    # `unset_state` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
     def unset_state(self):
         glDisable(self.tex.target)
 
 
-# `_PygAlphaBlending` 是当前文件暴露的核心类型，它负责维护与该模块职责直接相关的长期状态。
 class _PygAlphaBlending(pyglet.graphics.Group):
-    # 初始化阶段会把实验配置翻译成环境内部状态，包括单机实例、观测裁剪边界、碰撞阈值、障碍物和日志缓存。
-    # 这些状态会在后续每个 step 中被不断读取和更新，因此这里决定了环境运行时的数据布局。
     def __init__(self, parent=None):
         super().__init__(parent=parent)
 
-    # `set_state` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
     def set_state(self):
         glEnable(GL_BLEND)
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
 
-    # `unset_state` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
     def unset_state(self):
         glDisable(GL_BLEND)
 
@@ -1086,5 +1000,4 @@ def _np2tex(a):
     img = pyglet.image.ImageData(w, h, "L", b)
     # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
     return img.get_texture()
-
 

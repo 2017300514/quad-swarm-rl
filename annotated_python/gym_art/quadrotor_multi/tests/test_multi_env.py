@@ -1,35 +1,35 @@
 # 中文注释副本；原始文件：gym_art/quadrotor_multi/tests/test_multi_env.py
 # 说明：为避免修改源码，本文件仅作为阅读辅助材料。
-# 该文件属于多机四旋翼仿真环境的一部分，负责环境状态、物理过程或配套工具中的某一环。
-# 它的上游通常来自场景配置、动力学状态或训练动作，下游会流向观测构造、奖励结算、碰撞处理或可视化。
+# 这个文件是多机环境本体的基础测试入口。
+# 它统一构造一个轻量 `QuadrotorEnvMulti`，然后分别检查基础 step、渲染、本地观测和 replay buffer 包装这几条常用链路。
 
-# 下面这组导入把当前模块会消费的环境组件、训练接口或数值工具集中拉进来；真正重要的是后续它们怎样参与数据流。
 import time
 from unittest import TestCase
 import numpy as np
 
-# 下面这组导入把当前模块会消费的环境组件、训练接口或数值工具集中拉进来；真正重要的是后续它们怎样参与数据流。
 from gym_art.quadrotor_multi.quad_experience_replay import ExperienceReplayWrapper
 from gym_art.quadrotor_multi.quadrotor_multi import QuadrotorEnvMulti
 
 
-# `create_env` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
+# 这个 helper 把测试里反复出现的环境默认参数折叠起来。
+# 重点不是造“真实训练配置”，而是造一个足够轻、足够稳定的测试环境。
 def create_env(num_agents, use_numba=False, use_replay_buffer=False, episode_duration=7, local_obs=-1):
     quad = 'Crazyflie'
     dyn_randomize_every = dyn_randomization_ratio = None
 
     episode_duration = episode_duration  # seconds
 
+    # 测试里直接用原始电机控制，避免再引入额外控制器层的不确定性。
     raw_control = raw_control_zero_middle = True
 
     sampler_1 = None
     if dyn_randomization_ratio is not None:
-        # 这里构造的是环境默认奖励权重表，表示在没有实验覆盖时多机导航任务各个目标项的基准权重。
+        # 如果打开动力学随机化，这里会给环境提供一个相对采样器；默认测试保持关闭，减少噪声来源。
         sampler_1 = dict(type="RelativeSampler", noise_ratio=dyn_randomization_ratio, sampler="normal")
 
     sense_noise = 'default'
 
-    # 这里构造的是环境默认奖励权重表，表示在没有实验覆盖时多机导航任务各个目标项的基准权重。
+    # 这里只保留最小必要的动力学改写，方便测试噪声和阻尼路径是否能正常走通。
     dynamics_change = dict(noise=dict(thrust_noise_ratio=0.05), damp=dict(vel=0, omega_quadratic=0))
 
     env = QuadrotorEnvMulti(
@@ -41,15 +41,13 @@ def create_env(num_agents, use_numba=False, use_replay_buffer=False, episode_dur
         swarm_obs="pos_vel_goals_ndist_gdist",
         local_obs=local_obs,
     )
-    # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
     return env
 
 
-# `TestMultiEnv` 是当前文件暴露的核心类型，它负责维护与该模块职责直接相关的长期状态。
+# 这组测试覆盖多机环境本体的几条主链：step、render 和 local observation。
 class TestMultiEnv(TestCase):
-    # `test_basic` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
+    # 最基础的冒烟测试：环境是否能 reset，step 后返回的数据结构是否还是预期形状。
     def test_basic(self):
-        # 该值来自实验配置，决定环境一次并行维护多少架无人机；后续会影响观测拼接尺寸、邻居筛选范围和碰撞矩阵规模。
         num_agents = 2
         env = create_env(num_agents, use_numba=False)
 
@@ -72,9 +70,8 @@ class TestMultiEnv(TestCase):
 
         env.close()
 
-    # `test_render` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
+    # 渲染测试主要覆盖 `env.render()` 和环境主循环能否在开启 local obs 的情况下稳定共存。
     def test_render(self):
-        # 该值来自实验配置，决定环境一次并行维护多少架无人机；后续会影响观测拼接尺寸、邻居筛选范围和碰撞矩阵规模。
         num_agents = 16
         env = create_env(num_agents, use_numba=False, local_obs=8)
         env.render_speed = 1.0
@@ -100,9 +97,8 @@ class TestMultiEnv(TestCase):
 
         env.close()
 
-    # `test_local_info` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
+    # 这里不看渲染，只单独让 `local_obs=8` 运行一段时间，确认邻居局部观测路径不会在长期 step 中出错。
     def test_local_info(self):
-        # 该值来自实验配置，决定环境一次并行维护多少架无人机；后续会影响观测拼接尺寸、邻居筛选范围和碰撞矩阵规模。
         num_agents = 16
         env = create_env(num_agents, use_numba=False, local_obs=8)
 
@@ -114,11 +110,10 @@ class TestMultiEnv(TestCase):
         env.close()
 
 
-# `TestReplayBuffer` 是当前文件暴露的核心类型，它负责维护与该模块职责直接相关的长期状态。
+# 这一组单独验证 replay wrapper 包上去之后，环境仍然能自重置、step 和 render。
 class TestReplayBuffer(TestCase):
-    # `test_replay` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
+    # 这里把采样概率直接设成 1.0，是为了强制覆盖 replay buffer 路径，而不是测试真实训练推荐超参。
     def test_replay(self):
-        # 该值来自实验配置，决定环境一次并行维护多少架无人机；后续会影响观测拼接尺寸、邻居筛选范围和碰撞矩阵规模。
         num_agents = 16
         replay_buffer_sample_prob = 1.0
         env = create_env(num_agents, use_numba=False, use_replay_buffer=replay_buffer_sample_prob > 0, episode_duration=5)
@@ -134,7 +129,6 @@ class TestReplayBuffer(TestCase):
         while num_steps < render_n_frames:
             obs, rewards, dones, infos = env.step([env.action_space.sample() for _ in range(num_agents)])
             num_steps += 1
-            # print('Rewards: ', rewards, "\nCollisions: \n", env.collisions, "\nDistances: \n", env.dist)
             env.render()
             # this env self-resets
 

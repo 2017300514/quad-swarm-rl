@@ -83,6 +83,21 @@
 - [annotated_python/gym_art/quadrotor_multi/scenarios/obstacles/o_static_same_goal.py](/home/server2/sui_work_not_delete/quad-swarm-rl/annotated_python/gym_art/quadrotor_multi/scenarios/obstacles/o_static_same_goal.py:1)
 - [annotated_python/gym_art/quadrotor_multi/scenarios/obstacles/o_dynamic_same_goal.py](/home/server2/sui_work_not_delete/quad-swarm-rl/annotated_python/gym_art/quadrotor_multi/scenarios/obstacles/o_dynamic_same_goal.py:1)
 - [annotated_python/gym_art/quadrotor_multi/scenarios/obstacles/o_swap_goals.py](/home/server2/sui_work_not_delete/quad-swarm-rl/annotated_python/gym_art/quadrotor_multi/scenarios/obstacles/o_swap_goals.py:1)
+- [annotated_python/swarm_rl/env_wrappers/v_value_map.py](/home/server2/sui_work_not_delete/quad-swarm-rl/annotated_python/swarm_rl/env_wrappers/v_value_map.py:1)
+- [annotated_python/gym_art/quadrotor_multi/tests/plot_v_value.py](/home/server2/sui_work_not_delete/quad-swarm-rl/annotated_python/gym_art/quadrotor_multi/tests/plot_v_value.py:1)
+- [annotated_python/gym_art/quadrotor_multi/tests/plot_v_value_2d.py](/home/server2/sui_work_not_delete/quad-swarm-rl/annotated_python/gym_art/quadrotor_multi/tests/plot_v_value_2d.py:1)
+- [annotated_python/gym_art/quadrotor_multi/tests/plot_v_value_3d.py](/home/server2/sui_work_not_delete/quad-swarm-rl/annotated_python/gym_art/quadrotor_multi/tests/plot_v_value_3d.py:1)
+- [annotated_python/gym_art/quadrotor_multi/tests/plot_v_value_4d.py](/home/server2/sui_work_not_delete/quad-swarm-rl/annotated_python/gym_art/quadrotor_multi/tests/plot_v_value_4d.py:1)
+- [annotated_python/swarm_rl/enjoy.py](/home/server2/sui_work_not_delete/quad-swarm-rl/annotated_python/swarm_rl/enjoy.py:1)
+- [annotated_python/swarm_rl/models/weight_recycler.py](/home/server2/sui_work_not_delete/quad-swarm-rl/annotated_python/swarm_rl/models/weight_recycler.py:1)
+- [annotated_python/swarm_rl/utils.py](/home/server2/sui_work_not_delete/quad-swarm-rl/annotated_python/swarm_rl/utils.py:1)
+- [annotated_python/gym_art/quadrotor_multi/inertia.py](/home/server2/sui_work_not_delete/quad-swarm-rl/annotated_python/gym_art/quadrotor_multi/inertia.py:1)
+- [annotated_python/gym_art/quadrotor_multi/numba_utils.py](/home/server2/sui_work_not_delete/quad-swarm-rl/annotated_python/gym_art/quadrotor_multi/numba_utils.py:1)
+- [annotated_python/gym_art/quadrotor_multi/quad_models.py](/home/server2/sui_work_not_delete/quad-swarm-rl/annotated_python/gym_art/quadrotor_multi/quad_models.py:1)
+- [annotated_python/swarm_rl/env_wrappers/compatibility.py](/home/server2/sui_work_not_delete/quad-swarm-rl/annotated_python/swarm_rl/env_wrappers/compatibility.py:1)
+- [annotated_python/swarm_rl/env_wrappers/tests/test_quads.py](/home/server2/sui_work_not_delete/quad-swarm-rl/annotated_python/swarm_rl/env_wrappers/tests/test_quads.py:1)
+- [annotated_python/gym_art/quadrotor_multi/tests/test_numba_opt.py](/home/server2/sui_work_not_delete/quad-swarm-rl/annotated_python/gym_art/quadrotor_multi/tests/test_numba_opt.py:1)
+- [annotated_python/gym_art/quadrotor_multi/tests/test_multi_env.py](/home/server2/sui_work_not_delete/quad-swarm-rl/annotated_python/gym_art/quadrotor_multi/tests/test_multi_env.py:1)
 
 ## 4. 已完成内容概述
 
@@ -150,29 +165,54 @@
 - `paper/mean_std_plots_quad_compare_arch.py` 中 attention / deepsets / mlp 三组架构日志怎样被聚合成统一对比图
 - `paper/mean_std_plots_quad_obstacle_compare_arch_density.py` 中不同 obstacle density 分组怎样影响成功率、碰撞率和目标距离曲线
 - `paper/mean_std_plots_quad_obstacle_compare_arch_neighbor.py` 中不同 neighbor budget 分组怎样影响障碍实验的四类主指标
+- `paper/mean_std_plots_quad_baseline.py` 中无障碍 baseline 实验怎样把 reward / distance / collision / flight performance 四项指标统一换算成论文图
+- `paper/mean_std_plots_quad_annealing.py` 中 baseline / no_annealing / no_replay 三组训练设置怎样共用同一套插值与对数坐标逻辑做并排比较
+- `paper/mean_std_plots_quad_obstacle_ablation.py` 中四个障碍实验消融组怎样在 EMA + 平滑后统一比较成功率、碰撞率和目标距离
+- `paper/mean_std_plots_quad_scale.py` 中不同 swarm 规模主实验怎样把多组 run 汇总成目标距离与机间碰撞率对比图
+- `paper/mean_std_plots_quad_obstacle_num_agents.py` 中 8 / 16 / 32 agent 障碍实验怎样共用 EMA 与平滑管线比较四类主指标
+- `swarm_rl/runs/obstacles/quad_obstacle_baseline.py` 中论文障碍主实验的基础 CLI 怎样把回放、退火、障碍观测和默认地图统计打包成复用模板
+- `swarm_rl/runs/obstacles/quads_multi_obstacles.py` 中最终 attention 障碍实验怎样在 baseline 之上只覆写邻居观测与 WandB 分组
+- `swarm_rl/runs/obstacles/quads_multi_obstacles_nei_encoder_search.py` 中 neighbor encoder 搜索怎样联合扫描可见邻居数和编码器类型
+- `swarm_rl/runs/obstacles/pbt_quads_multi_obstacles.py` 中 PBT 版本怎样改写训练时长、worker 布局和策略进化参数
+- `swarm_rl/runs/obstacles/obst_density_random.py`、`obst_domain_random.py`、`obst_size_random.py` 中三类 obstacle randomization 配置怎样分别控制 density、size 或二者同时随机化
+- `swarm_rl/runs/single_quad/baseline.py` 中单机训练模板怎样把多机环境退化成 `quads_num_agents=1` 的基础飞行配置
+- `swarm_rl/runs/single_quad/single_quad.py` 中单机实验入口怎样在 baseline 之上只展开多 seed 和本地验证用的 WandB 标签
+- `swarm_rl/env_wrappers/v_value_map.py` 中 wrapper 怎样围绕当前观测做局部 x/y 扰动，并把 critic 的 value map 作为第二张图拼接到渲染帧旁边
+- `gym_art/quadrotor_multi/tests/plot_v_value_2d.py` 中运行期真正被调用的 helper 怎样把 21x21 value 栅格变成 RGB 热图
+- `plot_v_value.py`、`plot_v_value_3d.py`、`plot_v_value_4d.py` 怎样作为离线 debugger 工具，从人工导出的 value 样本检查 critic 在 1D/2D/3D 切片上的形状
+- `swarm_rl/enjoy.py` 中评估入口怎样复用训练期的组件注册与配置解析，并切到 Sample Factory 的 checkpoint rollout 入口
+- `swarm_rl/models/weight_recycler.py` 中逐神经元平均绝对激活分数怎样被提炼出来，供上层判断通道是否长期沉寂
+- `swarm_rl/utils.py` 中时间戳命名与多 seed 生成这两个小工具怎样服务实验脚本的批量运行和产物管理
+- `inertia.py` 中完整机体怎样被拆成多个刚体部件，并通过姿态旋转、质心重算与平行轴定理装配成整机惯量
+- `numba_utils.py` 中动力学热点所需的 `clip` overload、推力映射、叉乘和 OU 噪声怎样被做成 numba 友好的实现
+- `quad_models.py` 中几套标准机体模板怎样统一打包几何、阻尼、噪声和电机参数
+- `quadrotor_visualization.py` 中单机动力学状态、goal、追踪/侧视相机和 scene graph 怎样被串成第三人称回放与第一人称观测渲染链
+- `quadrotor_multi_visualization.py` 中多机 goal、障碍物、碰撞球、路径尾迹、速度/加速度箭头与键盘切视角逻辑怎样统一调度
+- `rendering3d.py` 中 window/FBO target、camera、scene graph、程序纹理与基础几何 primitive 怎样组成底层 OpenGL 渲染框架
+- `swarm_rl/env_wrappers/compatibility.py` 中旧式 `(obs, reward, done, info)` 多机环境怎样被兼容层改写成 Gymnasium / Sample Factory 期望的 terminated-truncated API
+- `swarm_rl/env_wrappers/tests/test_quads.py` 中组件注册、训练配置解析、环境创建与多步 rollout 这条 Sample Factory 入口链怎样被做成冒烟测试
+- `gym_art/quadrotor_multi/tests/test_numba_opt.py` 中环境 step 吞吐、动力学 `step1` 和传感器噪声路径怎样对拍 python 实现与 numba 实现
+- `gym_art/quadrotor_multi/tests/test_multi_env.py` 中基础多机环境、渲染、本地观测和 replay wrapper 几条常用测试链怎样被统一验证
 
 ## 5. 还未处理的重点文件
 
-下一批应优先继续下面三个文件：
+`paper/mean_std_plots_*` 主脚本、`swarm_rl/runs/obstacles/` 配置链、`swarm_rl/runs/single_quad/` 配置链、一组 `V-value` 可视化脚本，以及单机/多机/底层 3D 渲染链已经收尾，下一批建议转去零散尾项：
 
-1. `annotated_python/paper/mean_std_plots_quad_baseline.py`
-2. `annotated_python/paper/mean_std_plots_quad_annealing.py`
-3. `annotated_python/paper/mean_std_plots_quad_obstacle_ablation.py`
+1. 剩余测试、可视化零散文件
+2. 其它尚未人工重写的辅助工具文件
 
 原因：
 
-- 当前 `paper/` 目录已经补到 compare 系列，继续顺着剩余 `mean_std_plots_*` 聚合脚本推进，最容易保持注释口径一致
-- `mean_std_plots_quad_baseline.py` 与 `mean_std_plots_quad_annealing.py` 承接无障碍主实验与奖励/退火分析
-- `mean_std_plots_quad_obstacle_ablation.py` 承接障碍实验中的组件消融对比，和刚完成的 density / neighbor 图逻辑最接近
+- `paper/mean_std_plots_*` 这条连续主线已经全部补齐，继续停留在这一组文件上收益不高
+- `swarm_rl/runs/obstacles/` 这条和论文障碍复现实验最贴近的配置链也已经补到较完整状态
+- `swarm_rl/runs/single_quad/` 这条单机配置链也已经收尾
+- `V-value` 可视化链里运行期 wrapper 与离线 debugger 脚本也已经说明清楚
+- 下一步更适合把剩余测试脚本、零散可视化或还没人工重写的小工具文件收尾，减少断点分散
 
 之后建议顺序：
 
-1. `annotated_python/paper/mean_std_plots_quad_baseline.py`
-2. `annotated_python/paper/mean_std_plots_quad_annealing.py`
-3. `annotated_python/paper/mean_std_plots_quad_obstacle_ablation.py`
-4. `annotated_python/paper/mean_std_plots_quad_scale.py`
-5. `annotated_python/paper/mean_std_plots_quad_obstacle_num_agents.py`
-6. 剩余测试、可视化零散文件
+1. 剩余测试、可视化零散文件
+2. 其它尚未人工重写的辅助工具文件
 
 ## 5.1 本轮实际注释顺序摘要
 
@@ -203,7 +243,14 @@
 9. 论文分析脚本：
    `attn_heatmap.py` -> `fps_compare.py` -> `mean_std_plots_quad_obstacle.py` ->
    `mean_std_plots_quad_compare_arch.py` -> `mean_std_plots_quad_obstacle_compare_arch_density.py` ->
-   `mean_std_plots_quad_obstacle_compare_arch_neighbor.py`
+   `mean_std_plots_quad_obstacle_compare_arch_neighbor.py` -> `mean_std_plots_quad_baseline.py` ->
+   `mean_std_plots_quad_annealing.py` -> `mean_std_plots_quad_obstacle_ablation.py` ->
+   `mean_std_plots_quad_scale.py` -> `mean_std_plots_quad_obstacle_num_agents.py`
+10. V-value 可视化尾项：
+   `swarm_rl/env_wrappers/v_value_map.py` -> `tests/plot_v_value.py` ->
+   `tests/plot_v_value_2d.py` -> `tests/plot_v_value_3d.py` -> `tests/plot_v_value_4d.py`
+11. 3D 渲染显示链：
+   `quadrotor_visualization.py` -> `quadrotor_multi_visualization.py` -> `rendering3d.py`
 
 这个顺序的核心原则是：
 
@@ -213,20 +260,19 @@
 
 ## 5.2 下一次继续时的推荐顺序
 
-如果下一次继续，建议不要跳着做，而是按下面顺序推进剩余 `paper/` 文件：
+如果下一次继续，建议不要跳着做，而是按下面顺序推进剩余零散文件：
 
-1. `annotated_python/paper/mean_std_plots_quad_baseline.py`
-2. `annotated_python/paper/mean_std_plots_quad_annealing.py`
-3. `annotated_python/paper/mean_std_plots_quad_obstacle_ablation.py`
-4. `annotated_python/paper/mean_std_plots_quad_scale.py`
-5. `annotated_python/paper/mean_std_plots_quad_obstacle_num_agents.py`
+1. `gym_art/quadrotor_multi/obstacles/test/unit_test.py`
+2. `gym_art/quadrotor_multi/obstacles/test/speed_test.py`
+3. `gym_art/quadrotor_multi/collisions/test/unit_test/obstacles.py`
+4. `gym_art/quadrotor_multi/collisions/test/unit_test/quadrotor.py`
+5. 其余剩余测试、可视化零散文件
 
 推荐理由：
 
-- 这几份脚本和刚完成的 compare 系列最相邻，数据流、缓存、插值、平滑、均值/标准差带的逻辑最容易复用
-- `baseline` 与 `annealing` 先做，可以把无障碍主实验和奖励退火逻辑补完整
-- `obstacle_ablation`、`scale`、`num_agents` 再跟进，可以把障碍实验横向对比链补齐
-- 这样收完以后，`paper/` 目录只会剩少量零散可视化脚本，断点最清楚
+- 环境包装层与基础测试链已经补齐，下一步最顺的是把障碍物与碰撞相关的单元/速度测试一起收尾
+- `obstacles/test/*` 紧挨着前面已做过的 `obstacles.py` 与 `obstacles/utils.py`，上下文最连续
+- `collisions/test/unit_test/*` 则正好接在已做过的 `collisions/obstacles.py` 与 `collisions/quadrotors.py` 后面，能把验证链补完整
 
 ## 6. 当前有效注释风格
 

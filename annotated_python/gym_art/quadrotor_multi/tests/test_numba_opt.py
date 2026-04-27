@@ -1,28 +1,24 @@
 # 中文注释副本；原始文件：gym_art/quadrotor_multi/tests/test_numba_opt.py
 # 说明：为避免修改源码，本文件仅作为阅读辅助材料。
-# 该文件属于多机四旋翼仿真环境的一部分，负责环境状态、物理过程或配套工具中的某一环。
-# 它的上游通常来自场景配置、动力学状态或训练动作，下游会流向观测构造、奖励结算、碰撞处理或可视化。
+# 这个文件专门比较 python 路径和 numba 路径是否一致、是否更快。
+# 它既测环境 step 吞吐，也测动力学 step1 和传感器噪声这两段最容易被 numba 重写的热点逻辑。
 
-# 下面这组导入把当前模块会消费的环境组件、训练接口或数值工具集中拉进来；真正重要的是后续它们怎样参与数据流。
 import time
 from unittest import TestCase
 import numpy.random as nr
 
-# 下面这组导入把当前模块会消费的环境组件、训练接口或数值工具集中拉进来；真正重要的是后续它们怎样参与数据流。
 import numpy
 
-# 下面这组导入把当前模块会消费的环境组件、训练接口或数值工具集中拉进来；真正重要的是后续它们怎样参与数据流。
 from gym_art.quadrotor_multi.tests.test_multi_env import create_env
 from gym_art.quadrotor_multi.numba_utils import OUNoiseNumba
 from gym_art.quadrotor_multi.quad_utils import OUNoise
 from gym_art.quadrotor_multi.sensor_noise import SensorNoise
 
 
-# `TestOpt` 是当前文件暴露的核心类型，它负责维护与该模块职责直接相关的长期状态。
+# 这里的测试不是论文指标测试，而是实现一致性和性能回归测试。
 class TestOpt(TestCase):
-    # `test_optimized_env` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
+    # 先做一次简单的 numba 环境冒烟运行，确认优化版环境至少能 reset/step 到结尾。
     def test_optimized_env(self):
-        # 该值来自实验配置，决定环境一次并行维护多少架无人机；后续会影响观测拼接尺寸、邻居筛选范围和碰撞矩阵规模。
         num_agents = 4
         env = create_env(num_agents, use_numba=True)
 
@@ -37,17 +33,15 @@ class TestOpt(TestCase):
 
         env.close()
 
-    # 这里通过装饰器把额外框架语义附着到下面的定义上，真正影响的是后续调用方式或注册行为。
     @staticmethod
-    # `step_env` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
+    # 抽出一个共享 benchmark helper，方便对比普通 env 和 numba env 的 step FPS。
     def step_env(use_numba, steps):
-        # 该值来自实验配置，决定环境一次并行维护多少架无人机；后续会影响观测拼接尺寸、邻居筛选范围和碰撞矩阵规模。
         num_agents = 4
         env = create_env(num_agents, use_numba=use_numba)
         env.reset()
         num_steps = 0
 
-        # warmup
+        # 先预热，避免把首次编译/首次缓存命中的成本混进正式计时。
         for i in range(20):
             obs, rewards, dones, infos = env.step([env.action_space.sample() for _ in range(num_agents)])
             num_steps += 1
@@ -60,10 +54,9 @@ class TestOpt(TestCase):
 
         elapsed_sec = time.time() - start
         fps = (num_agents * steps) / elapsed_sec
-        # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
         return fps, elapsed_sec
 
-    # `test_performance_difference` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
+    # 这个测试只打印性能对比，不断言具体倍率，因为不同机器上的绝对加速比不稳定。
     def test_performance_difference(self):
         steps = 1000
         fps, elapsed_sec = self.step_env(use_numba=False, steps=steps)
@@ -72,10 +65,10 @@ class TestOpt(TestCase):
         print('Regular: ', fps, elapsed_sec)
         print('Numba: ', fps_numba, elapsed_sec_numba)
 
-    # `test_step_and_noise_opt` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
+    # 这里做更细粒度的一致性检查：
+    # 同一份 dynamics 深拷贝分别走 python step、python 复制体、numba step，再比较状态量是否对齐。
     def test_step_and_noise_opt(self):
         for _ in range(30):
-            # 该值来自实验配置，决定环境一次并行维护多少架无人机；后续会影响观测拼接尺寸、邻居筛选范围和碰撞矩阵规模。
             num_agents = 4
             env = create_env(num_agents)
             env.reset()
@@ -86,7 +79,6 @@ class TestOpt(TestCase):
             thrust_noise_ratio = 0.05
             thrusts = numpy.random.random(4)
 
-            # 下面这组导入把当前模块会消费的环境组件、训练接口或数值工具集中拉进来；真正重要的是后续它们怎样参与数据流。
             import copy
             dynamics_copy = copy.deepcopy(dynamics)
             dynamics_copy_numba = copy.deepcopy(dynamics)
@@ -100,14 +92,12 @@ class TestOpt(TestCase):
             dynamics_copy.step1(thrusts, dt, thrust_noise_copy)
             dynamics_copy_numba.step1_numba(thrusts, dt, thrust_noise_numba)
 
-            # `pos_vel_acc_tor` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
+            # 只抽取最关键的连续状态量来比较，避免测试代码在断言处重复写长串字段名。
             def pos_vel_acc_tor(d):
-                # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
                 return d.pos, d.vel, d.acc, d.torque
 
-            # `rot_omega_accm` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
+            # 第二组字段主要覆盖姿态与 IMU 侧输出，确保传感器噪声路径也没有偏差。
             def rot_omega_accm(d):
-                # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
                 return d.rot, d.omega, d.accelerometer
 
             p1, v1, a1, t1 = pos_vel_acc_tor(dynamics)
@@ -124,7 +114,7 @@ class TestOpt(TestCase):
             self.assertTrue(numpy.allclose(a1, a3))
             self.assertTrue(numpy.allclose(t1, t3))
 
-            # the below test is to check if add_noise is returning the same value
+            # 下面再比较 python 版和 numba 版传感器噪声注入是否给出一致结果。
             r1, o1, accm1 = rot_omega_accm(dynamics)
             r2, o2, accm2 = rot_omega_accm(dynamics_copy_numba)
 

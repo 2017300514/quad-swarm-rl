@@ -1,9 +1,8 @@
 # 中文注释副本；原始文件：swarm_rl/runs/obstacles/obst_size_random.py
-# 说明：为避免修改源码，本文件仅作为阅读辅助材料。
-# 该文件属于障碍场景实验配置，主要作用是把一组训练超参数打包成可复现实验入口。
-# 这些配置本身不执行仿真，但会控制环境难度、观测结构、回放概率和模型结构选择。
+# 这个配置只随机化障碍尺寸，不随机化障碍密度。
+# 它适合和 `obst_density_random.py`、`obst_domain_random.py` 对照，
+# 单独判断 obstacle size 的变化会如何影响障碍导航策略。
 
-# 下面这组导入把当前模块会消费的环境组件、训练接口或数值工具集中拉进来；真正重要的是后续它们怎样参与数据流。
 from sample_factory.launcher.run_description import Experiment, ParamGrid, RunDescription
 from swarm_rl.runs.obstacles.quad_obstacle_baseline import QUAD_BASELINE_CLI_8
 

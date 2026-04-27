@@ -1,9 +1,8 @@
 # 中文注释副本；原始文件：swarm_rl/runs/obstacles/quads_multi_obstacles_nei_encoder_search.py
-# 说明：为避免修改源码，本文件仅作为阅读辅助材料。
-# 该文件属于障碍场景实验配置，主要作用是把一组训练超参数打包成可复现实验入口。
-# 这些配置本身不执行仿真，但会控制环境难度、观测结构、回放概率和模型结构选择。
+# 这个脚本不是论文最终配置，而是为“邻居编码器怎么做更合适”准备的搜索入口。
+# 它沿用障碍 baseline，再横向比较 `attention` / `mean_embed` / `mlp` 三种邻居编码方式，
+# 同时对不同可见邻居数量做小规模网格搜索。
 
-# 下面这组导入把当前模块会消费的环境组件、训练接口或数值工具集中拉进来；真正重要的是后续它们怎样参与数据流。
 from sample_factory.launcher.run_description import Experiment, ParamGrid, RunDescription
 from swarm_rl.runs.obstacles.quad_obstacle_baseline import QUAD_BASELINE_CLI_8
 
@@ -15,6 +14,9 @@ _params = ParamGrid(
     ]
 )
 
+# 注意这里虽然网格里会扫 `quads_neighbor_encoder_type`，
+# 但通用编码器分支仍固定为 `quads_encoder_type=attention`，说明实验关注的是“邻居子编码器”变化，
+# 而不是整个总网络结构彻底改写。
 OBSTACLE_MODEL_CLI = QUAD_BASELINE_CLI_8 + (
     ' --num_workers=36 --num_envs_per_worker=4 --quads_num_agents=8 '
     '--quads_neighbor_obs_type=pos_vel --quads_encoder_type=attention '

@@ -1,9 +1,9 @@
 # 中文注释副本；原始文件：gym_art/quadrotor_multi/numba_utils.py
 # 说明：为避免修改源码，本文件仅作为阅读辅助材料。
-# 该文件属于多机四旋翼仿真环境的一部分，负责环境状态、物理过程或配套工具中的某一环。
-# 它的上游通常来自场景配置、动力学状态或训练动作，下游会流向观测构造、奖励结算、碰撞处理或可视化。
+# 这个文件的职责是给动力学与控制主链补齐一层 “numba 能直接 JIT 的数值积木”。
+# 上游调用者通常是电机推力换算、向量几何和探索噪声模块；下游则是 `quadrotor_dynamics.py`
+# 或相关低层数值循环，目标是在不牺牲 Python 代码结构的前提下，把热点运算搬到 nopython 路径。
 
-# 下面这组导入把当前模块会消费的环境组件、训练接口或数值工具集中拉进来；真正重要的是后续它们怎样参与数据流。
 import numpy as np
 import numpy.random as nr
 from numba import njit, types, vectorize, int32, float32, double, boolean
@@ -12,11 +12,10 @@ from numba.extending import overload
 from numba.experimental import jitclass
 
 
-# 这里通过装饰器把额外框架语义附着到下面的定义上，真正影响的是后续调用方式或注册行为。
 @overload(np.clip)
-# `impl_clip` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
 def impl_clip(a, a_min, a_max):
-    # Check that `a_min` and `a_max` are scalars, and at most one of them is None.
+    # 这里不是重新定义 numpy API，而是给 numba 注册一个它能理解的 `np.clip` 版本。
+    # 没有这层 overload 时，某些 jit 路径里对标量或 1D 向量的裁剪会因为类型推断失败而退回 Python。
     if not isinstance(a_min, (types.Integer, types.Float, types.NoneType)):
         raise TypingError("a_min must be a_min scalar int/float")
     if not isinstance(a_max, (types.Integer, types.Float, types.NoneType)):
@@ -25,67 +24,43 @@ def impl_clip(a, a_min, a_max):
         raise TypingError("a_min and a_max can't both be None")
 
     if isinstance(a, (types.Integer, types.Float)):
-        # `a` is a scalar with a valid type
         if isinstance(a_min, types.NoneType):
-            # `a_min` is None
-            # `impl` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
             def impl(a, a_min, a_max):
-                # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
                 return min(a, a_max)
         elif isinstance(a_max, types.NoneType):
-            # `a_max` is None
-            # `impl` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
             def impl(a, a_min, a_max):
-                # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
                 return max(a, a_min)
         else:
-            # neither `a_min` or `a_max` are None
-            # `impl` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
             def impl(a, a_min, a_max):
-                # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
                 return min(max(a, a_min), a_max)
     elif (
-            isinstance(a, types.Array) and
-            a.ndim == 1 and
-            isinstance(a.dtype, (types.Integer, types.Float))
+        isinstance(a, types.Array) and
+        a.ndim == 1 and
+        isinstance(a.dtype, (types.Integer, types.Float))
     ):
-        # `a` is a 1D array of the proper type
-        # `impl` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
+        # 数组版本显式逐元素展开，这样 numba 会在编译期把内部 `np.clip` 分发到上面的标量实现。
         def impl(a, a_min, a_max):
-            # Allocate an output array using standard numpy functions
             out = np.empty_like(a)
-            # Iterate over `a`, calling `np.clip` on every element
             for i in range(a.size):
-                # This will dispatch to the proper scalar implementation (as
-                # defined above) at *compile time*. There should have no
-                # overhead at runtime.
-                # 这里按 observation space 上下界裁剪邻居观测，避免极端数值破坏网络训练时的输入尺度。
                 out[i] = np.clip(a[i], a_min, a_max)
-            # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
             return out
     else:
         raise TypingError("`a` must be an int/float or a 1D array of ints/floats")
 
-    # The call to `np.clip` has arguments with valid types, return our
-    # numba-compatible implementation
-    # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
     return impl
 
 
-# 这里通过装饰器把额外框架语义附着到下面的定义上，真正影响的是后续调用方式或注册行为。
 @vectorize(nopython=True)
-# `angvel2thrust_numba` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
 def angvel2thrust_numba(w, linearity=0.424):
-    # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
+    # 这就是电机角速度到推力的简化非线性映射；
+    # 上层动力学会成批调用它，把每个 rotor 的命令转成物理推力。
     return (1 - linearity) * w ** 2 + linearity * w
 
 
-# 这里通过装饰器把额外框架语义附着到下面的定义上，真正影响的是后续调用方式或注册行为。
 @njit
-# `numba_cross` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
 def numba_cross(a, b):
-    # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
-    return np.array([a[1]*b[2] - a[2]*b[1], a[2]*b[0] - a[0]*b[2], a[0]*b[1] - a[1]*b[0]])
+    # 手写叉乘是为了让热点向量几何留在纯 numba 路径，不必频繁退回 numpy 的通用实现。
+    return np.array([a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]])
 
 
 spec = [
@@ -98,17 +73,13 @@ spec = [
 ]
 
 
-# 这里通过装饰器把额外框架语义附着到下面的定义上，真正影响的是后续调用方式或注册行为。
 @jitclass(spec)
-# `OUNoiseNumba` 是当前文件暴露的核心类型，它负责维护与该模块职责直接相关的长期状态。
 class OUNoiseNumba:
-    # 下面的文档字符串通常由源码作者提供，用来补充模块职责、输入输出约束或使用方式。
     """Ornstein–Uhlenbeck process"""
 
-    # 初始化阶段会把实验配置翻译成环境内部状态，包括单机实例、观测裁剪边界、碰撞阈值、障碍物和日志缓存。
-    # 这些状态会在后续每个 step 中被不断读取和更新，因此这里决定了环境运行时的数据布局。
+    # 这是一个 numba 版 OU 噪声生成器。
+    # 它维护连续时间相关的内部状态 `state`，适合给动作空间加“平滑抖动”，而不是每步完全独立的白噪声。
     def __init__(self, action_dimension, mu=0, theta=0.15, sigma=0.3, use_seed=False):
-        # 下面开始文件或代码块自带的文档字符串；如果源码作者已经解释设计意图，应优先结合它理解上下文。
         """
         @param: mu: mean of noise
         @param: theta: stabilization coeff (i.e. noise return to mean)
@@ -125,15 +96,14 @@ class OUNoiseNumba:
         if use_seed:
             nr.seed(2)
 
-    # `reset` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
     def reset(self):
+        # 新 episode 或新 rollout 开始时把噪声状态拉回均值，避免前一个片段的相关噪声直接串到下一个片段里。
         self.state = np.ones(self.action_dimension) * self.mu
 
-    # `noise` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
     def noise(self):
+        # OU 更新把当前状态往均值 `mu` 拉回，同时再叠一层高斯扰动，
+        # 因此输出会比独立高斯噪声更平滑、更像电机或控制量的连续抖动。
         x = self.state
         dx = self.theta * (self.mu - x) + self.sigma * nr.randn(len(x))
         self.state = x + dx
-        # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
         return self.state
-

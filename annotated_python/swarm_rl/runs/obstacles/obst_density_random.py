@@ -1,9 +1,8 @@
 # 中文注释副本；原始文件：swarm_rl/runs/obstacles/obst_density_random.py
-# 说明：为避免修改源码，本文件仅作为阅读辅助材料。
-# 该文件属于障碍场景实验配置，主要作用是把一组训练超参数打包成可复现实验入口。
-# 这些配置本身不执行仿真，但会控制环境难度、观测结构、回放概率和模型结构选择。
+# 这个配置脚本把论文障碍基线扩展成“障碍密度随机化”实验。
+# 其作用不是改环境代码，而是通过 CLI 把 obstacle density 采样范围交给训练入口，
+# 观察策略在不同障碍密度下的泛化能力。
 
-# 下面这组导入把当前模块会消费的环境组件、训练接口或数值工具集中拉进来；真正重要的是后续它们怎样参与数据流。
 from sample_factory.launcher.run_description import Experiment, ParamGrid, RunDescription
 from swarm_rl.runs.obstacles.quad_obstacle_baseline import QUAD_BASELINE_CLI_8
 
@@ -17,6 +16,7 @@ OBSTACLE_MODEL_CLI = QUAD_BASELINE_CLI_8 + (
     ' --num_workers=36 --num_envs_per_worker=4 --quads_num_agents=8 '
     '--quads_neighbor_visible_num=6 --quads_neighbor_obs_type=pos_vel --quads_encoder_type=attention '
     '--with_wandb=True --wandb_project=Quad-Swarm-RL --wandb_user=multi-drones '
+    # 这里打开 density randomization，并把 obstacle density 采样区间限制在 0.05 到 0.2。
     '--quads_domain_random=True --quads_obst_density_random=True '
     '--quads_obst_density_min=0.05 --quads_obst_density_max=0.2 '
     '--wandb_group=obst_density_random'

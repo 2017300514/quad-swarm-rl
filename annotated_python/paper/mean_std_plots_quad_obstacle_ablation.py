@@ -1,9 +1,8 @@
 # 中文注释副本；原始文件：paper/mean_std_plots_quad_obstacle_ablation.py
-# 说明：为避免修改源码，本文件仅作为阅读辅助材料。
-# 该文件用于论文结果分析或作图，消费训练日志、评估统计或中间结果来生成图表。
-# 它不改变训练流程，但决定如何把实验结果重新组织成论文中的可视化证据。
+# 该脚本把障碍环境中的组件消融实验聚合成论文对比图。
+# 上游输入是四组配置目录下的 TensorBoard 日志；下游输出是 `final_plots/ablation.pdf`，
+# 用来比较默认配置、障碍观测改写、自注意力、多机经验回放等组件对成功率、碰撞率和到目标距离的影响。
 
-# 下面这组导入把当前模块会消费的环境组件、训练接口或数值工具集中拉进来；真正重要的是后续它们怎样参与数据流。
 import argparse
 import os
 import pickle
@@ -11,39 +10,31 @@ import sys
 from os.path import join
 from pathlib import Path
 
-# 下面这组导入把当前模块会消费的环境组件、训练接口或数值工具集中拉进来；真正重要的是后续它们怎样参与数据流。
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import ticker
+from matplotlib.ticker import FuncFormatter
 from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
 
-# 下面这组导入把当前模块会消费的环境组件、训练接口或数值工具集中拉进来；真正重要的是后续它们怎样参与数据流。
 from sample_factory.utils.utils import ensure_dir_exists
-from matplotlib.ticker import FuncFormatter
 
 PAGE_WIDTH_INCHES = 8.2
 FULL_PAGE_WIDTH = 1.4 * PAGE_WIDTH_INCHES
 HALF_PAGE_WIDTH = FULL_PAGE_WIDTH / 2
 
-plt.rcParams['figure.figsize'] = (FULL_PAGE_WIDTH, 2.5)  # (2.5, 2.0) 7.5， 4
+plt.rcParams['figure.figsize'] = (FULL_PAGE_WIDTH, 2.5)
 
 NUM_AGENTS = 8
-EPISODE_DURATION = 16  # seconds
-TIME_METRIC_COLLISION = 60  # ONE MINUTE
-COLLISIONS_SCALE = ((
-                            TIME_METRIC_COLLISION / EPISODE_DURATION) / NUM_AGENTS) * 2  # times two because 1 collision = 2 drones collided
-COLLISIONS_OBST_SCALE = ((
-                                 TIME_METRIC_COLLISION / EPISODE_DURATION) / NUM_AGENTS)  # Not times two because 1 collision = 1 drone collide with 1 obstacle, and we only talk about drones here
-
+EPISODE_DURATION = 16
+TIME_METRIC_COLLISION = 60
+COLLISIONS_SCALE = ((TIME_METRIC_COLLISION / EPISODE_DURATION) / NUM_AGENTS) * 2
+COLLISIONS_OBST_SCALE = ((TIME_METRIC_COLLISION / EPISODE_DURATION) / NUM_AGENTS)
 CRASH_GROUND_SCALE = (-1.0 / EPISODE_DURATION)
 
 PLOTS = [
     dict(key='metric/agent_success_rate', name='Agent success rate', label='Average rate'),
-    # dict(key='policy_stats/avg_distance_to_goal_1s', name='Avg. distance to the goal', label='Avg. distance(m)', clip_min=0.1, y_scale_formater=[0.1, 0.5, 1.0, 2.0]),
-    # dict(key='metric/agent_deadlock_rate', name='Agent deadlock rate', label='Deadlock Rate'),
     dict(key='metric/agent_col_rate', name='Agent collision rate', label='Average rate'),
-    # dict(key='metric/agent_obst_col_rate', name='Agent collision w/ obstacles rate'),
     dict(key='o_random/distance_to_goal_1s', name='Distance to goal (random)', label='Distance (m)'),
     dict(key='o_static_same_goal/distance_to_goal_1s', name='Distance to goal (same goal)', label='Distance (m)'),
 ]
@@ -51,97 +42,88 @@ PLOTS = [
 PLOT_STEP = int(5e6)
 TOTAL_STEP = int(1e9 + 10000)
 
-# 'blue': '#1F77B4', 'orange': '#FF7F0E', 'green': '#2CA02C', 'red': '#d70000'
-# COLOR = ['#1F77B4', '#FF7F0E', '#2CA02C', '#d70000']
+# 颜色和 legend 顺序绑定四个 ablation 组别。
 COLOR = ['#4477AA', '#EE6677', '#54B345', '#CCBB44', '#AA3377']
 
 
-# `extract` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
 def extract(experiments):
     scalar_accumulators = [EventAccumulator(experiment_dir).Reload().scalars for experiment_dir in experiments]
 
-    # Filter non event files
-    scalar_accumulators = [scalar_accumulator for scalar_accumulator in scalar_accumulators if
-                           scalar_accumulator.Keys()]
+    scalar_accumulators = [
+        scalar_accumulator for scalar_accumulator in scalar_accumulators if scalar_accumulator.Keys()
+    ]
 
-    # Get and validate all scalar keys
     all_keys = [tuple(sorted(scalar_accumulator.Keys())) for scalar_accumulator in scalar_accumulators]
-    # assert len(set(all_keys)) == 1, \
-    #     "All runs need to have the same scalar keys. There are mismatches in {}".format(all_keys)
 
     keys = all_keys[0]
-    all_scalar_events_per_key = [[scalar_accumulator.Items(key)
-                                  for scalar_accumulator in scalar_accumulators] for key in keys]
+    all_scalar_events_per_key = [
+        [scalar_accumulator.Items(key) for scalar_accumulator in scalar_accumulators] for key in keys
+    ]
 
-    # Get and validate all steps per key
-    x_per_key = [[tuple(scalar_event.step
-                        for scalar_event in scalar_events) for scalar_events in all_scalar_events]
-                 for all_scalar_events in all_scalar_events_per_key]
+    # 这里保留每条 run 的原始 step 序列，再统一重采样到固定论文步长。
+    x_per_key = [
+        [tuple(scalar_event.step for scalar_event in scalar_events) for scalar_events in all_scalar_events]
+        for all_scalar_events in all_scalar_events_per_key
+    ]
 
     plot_step = PLOT_STEP
-    all_steps_per_key = [[tuple(int(step_id) for step_id in range(0, TOTAL_STEP, plot_step))
-                          for _ in all_scalar_events]
-                         for all_scalar_events in all_scalar_events_per_key]
+    all_steps_per_key = [
+        [tuple(int(step_id) for step_id in range(0, TOTAL_STEP, plot_step)) for _ in all_scalar_events]
+        for all_scalar_events in all_scalar_events_per_key
+    ]
 
     for i, all_steps in enumerate(all_steps_per_key):
-        # 这里不是业务逻辑本身，而是在守护运行假设，避免非法配置或异常状态把后续训练流程带偏。
-        assert len(set(
-            all_steps)) == 1, "For scalar {} the step numbering or count doesn't match. Step count for all runs: {}".format(
-            keys[i], [len(steps) for steps in all_steps])
+        assert len(set(all_steps)) == 1, (
+            "For scalar {} the step numbering or count doesn't match. Step count for all runs: {}".format(
+                keys[i], [len(steps) for steps in all_steps]
+            )
+        )
 
     steps_per_key = [all_steps[0] for all_steps in all_steps_per_key]
 
-    # Get values per step per key
-    values_per_key = [[[scalar_event.value for scalar_event in scalar_events] for scalar_events in all_scalar_events]
-                      for all_scalar_events in all_scalar_events_per_key]
+    values_per_key = [
+        [[scalar_event.value for scalar_event in scalar_events] for scalar_events in all_scalar_events]
+        for all_scalar_events in all_scalar_events_per_key
+    ]
 
-    # 这里构造的是环境默认奖励权重表，表示在没有实验覆盖时多机导航任务各个目标项的基准权重。
     interpolated_keys = dict()
-    for tmp_id in range(len(PLOTS)):
-        key_idx = keys.index(PLOTS[tmp_id]['key'])
+    for plot_idx in range(len(PLOTS)):
+        key_idx = keys.index(PLOTS[plot_idx]['key'])
         values = values_per_key[key_idx]
-
         x = steps_per_key[key_idx]
         x_steps = x_per_key[key_idx]
 
         interpolated_y = [[] for _ in values]
 
-        for i in range(len(values)):
+        for run_idx in range(len(values)):
             idx = 0
 
-            tmp_min_step = min(len(x_steps[i]), len(values[i]))
-            values[i] = values[i][2: tmp_min_step]
-            x_steps[i] = x_steps[i][2: tmp_min_step]
+            tmp_min_step = min(len(x_steps[run_idx]), len(values[run_idx]))
+            values[run_idx] = values[run_idx][2:tmp_min_step]
+            x_steps[run_idx] = x_steps[run_idx][2:tmp_min_step]
 
-            # 这里不是业务逻辑本身，而是在守护运行假设，避免非法配置或异常状态把后续训练流程带偏。
-            assert len(x_steps[i]) == len(values[i])
+            assert len(x_steps[run_idx]) == len(values[run_idx])
             for x_idx in x:
-                while idx < len(x_steps[i]) - 1 and x_steps[i][idx] < x_idx:
+                while idx < len(x_steps[run_idx]) - 1 and x_steps[run_idx][idx] < x_idx:
                     idx += 1
 
                 if x_idx == 0:
-                    interpolated_value = values[i][idx]
-                elif idx < len(values[i]) - 1:
-                    interpolated_value = (values[i][idx] + values[i][idx + 1]) / 2
+                    interpolated_value = values[run_idx][idx]
+                elif idx < len(values[run_idx]) - 1:
+                    interpolated_value = (values[run_idx][idx] + values[run_idx][idx + 1]) / 2
                 else:
-                    interpolated_value = values[i][idx]
+                    interpolated_value = values[run_idx][idx]
 
-                interpolated_y[i].append(interpolated_value)
-            # 这里不是业务逻辑本身，而是在守护运行假设，避免非法配置或异常状态把后续训练流程带偏。
-            assert len(interpolated_y[i]) == len(x)
+                interpolated_y[run_idx].append(interpolated_value)
+            assert len(interpolated_y[run_idx]) == len(x)
 
-        print(PLOTS[tmp_id]['key'], interpolated_y[0][:30])
+        interpolated_keys[PLOTS[plot_idx]['key']] = (x, interpolated_y)
 
-        interpolated_keys[PLOTS[tmp_id]['key']] = (x, interpolated_y)
-
-    # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
     return interpolated_keys
 
 
-# `aggregate` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
 def aggregate(path, subpath, experiments, ax, legend_name, group_id):
-    print("Started aggregation {}".format(path))
-
+    # 每个消融组的中间结果单独缓存，便于反复调整平滑和排版参数。
     curr_dir = os.path.dirname(os.path.abspath(__file__))
     cache_dir = join(curr_dir, 'cache')
     cache_env = join(cache_dir, subpath)
@@ -150,10 +132,8 @@ def aggregate(path, subpath, experiments, ax, legend_name, group_id):
         try:
             with open(join(cache_env, f'{subpath}.pickle'), 'rb') as fobj:
                 interpolated_keys = pickle.load(fobj)
-
         except FileNotFoundError:
             interpolated_keys = extract(experiments=experiments)
-
     else:
         cache_env = ensure_dir_exists(cache_env)
         interpolated_keys = extract(experiments=experiments)
@@ -161,10 +141,6 @@ def aggregate(path, subpath, experiments, ax, legend_name, group_id):
             pickle.dump(interpolated_keys, fobj)
 
     for i, key in enumerate(interpolated_keys.keys()):
-        # if i == (len(interpolated_keys.keys()) - 1) // 2:
-        #     set_xlabel = True
-        # else:
-        #     set_xlabel = False
         set_xlabel = True
         if i < 2:
             set_y_size = 1.0
@@ -173,9 +149,8 @@ def aggregate(path, subpath, experiments, ax, legend_name, group_id):
         plot(i, interpolated_keys[key], ax[i], set_xlabel, legend_name, group_id, set_y_size)
 
 
-# `smooth` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
 def smooth(y, radius, mode='two_sided', valid_only=False):
-    # 下面开始文件或代码块自带的文档字符串；如果源码作者已经解释设计意图，应优先结合它理解上下文。
+    # 论文曲线在 EMA 之后再做一次短窗口平滑，减少日志抖动。
     '''
     Smooth signal y, where radius is determines the size of the window
 
@@ -187,10 +162,8 @@ def smooth(y, radius, mode='two_sided', valid_only=False):
     valid_only: put nan in entries where the full-sized window is not available
 
     '''
-    # 这里不是业务逻辑本身，而是在守护运行假设，避免非法配置或异常状态把后续训练流程带偏。
     assert mode in ('two_sided', 'causal')
     if len(y) < 2 * radius + 1:
-        # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
         return np.ones_like(y) * y.mean()
     elif mode == 'two_sided':
         convkernel = np.ones(2 * radius + 1)
@@ -203,13 +176,11 @@ def smooth(y, radius, mode='two_sided', valid_only=False):
         out = out[:-radius + 1]
         if valid_only:
             out[:radius] = np.nan
-    # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
     return out
 
 
-# `one_sided_ema` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
 def one_sided_ema(xolds, yolds, low=None, high=None, n=512, decay_steps=1., low_counts_threshold=1e-8):
-    # 下面开始文件或代码块自带的文档字符串；如果源码作者已经解释设计意图，应优先结合它理解上下文。
+    # 这个 EMA 把不规则 step 间隔的原始日志投影到等距网格上，同时保留“只看过去”的因果平滑语义。
     '''
     perform one-sided (causal) EMA (exponential moving average)
     smoothing and resampling to an even grid with n points.
@@ -242,17 +213,14 @@ def one_sided_ema(xolds, yolds, low=None, high=None, n=512, decay_steps=1., low_
     low = xolds[0] if low is None else low
     high = xolds[-1] if high is None else high
 
-    # 这里不是业务逻辑本身，而是在守护运行假设，避免非法配置或异常状态把后续训练流程带偏。
     assert xolds[0] <= low, 'low = {} < xolds[0] = {} - extrapolation not permitted!'.format(low, xolds[0])
-    # 这里不是业务逻辑本身，而是在守护运行假设，避免非法配置或异常状态把后续训练流程带偏。
     assert xolds[-1] >= high, 'high = {} > xolds[-1] = {}  - extrapolation not permitted!'.format(high, xolds[-1])
-    # 这里不是业务逻辑本身，而是在守护运行假设，避免非法配置或异常状态把后续训练流程带偏。
     assert len(xolds) == len(yolds), 'length of xolds ({}) and yolds ({}) do not match!'.format(len(xolds), len(yolds))
 
     xolds = xolds.astype('float64')
     yolds = yolds.astype('float64')
 
-    luoi = 0  # last unused old index
+    luoi = 0
     sum_y = 0.
     count_y = 0.
     xnews = np.linspace(low, high, n)
@@ -281,13 +249,11 @@ def one_sided_ema(xolds, yolds, low=None, high=None, n=512, decay_steps=1., low_
     ys = sum_ys / count_ys
     ys[count_ys < low_counts_threshold] = np.nan
 
-    # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
     return xnews, ys, count_ys
 
 
-# `symmetric_ema` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
 def symmetric_ema(xolds, yolds, low=None, high=None, n=512, decay_steps=1., low_counts_threshold=1e-8):
-    # 下面开始文件或代码块自带的文档字符串；如果源码作者已经解释设计意图，应优先结合它理解上下文。
+    # 当前实现虽然名字叫 symmetric，实质上复用了 one-sided 版本，只保留单边 EMA 结果。
     """
     perform symmetric EMA (exponential moving average)
     smoothing and resampling to an even grid with n points.
@@ -317,61 +283,42 @@ def symmetric_ema(xolds, yolds, low=None, high=None, n=512, decay_steps=1., low_
 
     """
     xs, ys, count_ys = one_sided_ema(xolds, yolds, low, high, n, decay_steps, low_counts_threshold=0)
-    # _, ys2, count_ys2 = one_sided_ema(-xolds[::-1], yolds[::-1], -high, -low, n, decay_steps, low_counts_threshold=0)
-    # ys2 = ys2[::-1]
-    # count_ys2 = count_ys2[::-1]
-    # count_ys = count_ys1 + count_ys2
-    # ys = (ys1 * count_ys1 + ys2 * count_ys2) / count_ys
-    # ys[count_ys < low_counts_threshold] = np.nan
-    # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
     return xs, ys, count_ys
 
 
-# def plot(env, key, interpolated_key, ax, count):
-# `plot` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
 def plot(index, interpolated_key, ax, set_xlabel, legend_name, group_id, set_y_size):
     params = PLOTS[index]
 
-    # set title
-    title_text = params['name']
-    ax.set_title(title_text, fontsize=10)
+    ax.set_title(params['name'], fontsize=10)
     if set_xlabel:
         ax.set_xlabel('Total environment steps')
 
     x, y = interpolated_key
     x = np.array(x)
     y_np = [np.array(yi) for yi in y]
+
+    # 先用 EMA 把各条 run 重采样到统一 200 点网格，再做小窗口平滑，得到更稳的论文曲线。
     for i, yi in enumerate(y_np):
         xnew, y_np[i], _ = symmetric_ema(x, yi, x[0], x[-1], n=200, decay_steps=1.0)
 
     x = xnew
 
     y_np = [smooth(yi, 1) for yi in y_np]
-    # 这里把逐 agent 收集到的状态或观测重新压成批量张量，方便后续统一裁剪、拼接或送入网络。
     y_np = np.stack(y_np)
 
     logscale = params.get('logscale', False)
     if logscale:
         ax.set_yscale('log', base=2)
-        ax.yaxis.set_minor_locator(ticker.NullLocator())  # no minor ticks
+        ax.yaxis.set_minor_locator(ticker.NullLocator())
 
-    # `scientific` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
     def scientific(x, pos):
-        # x:  tick value - ie. what you currently see in yticks
-        # pos: a position - ie. the index of the tick (from 0 to 9 in this example)
-        # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
         return '%.1f' % x
 
     scientific_formatter = FuncFormatter(scientific)
     ax.yaxis.set_major_formatter(scientific_formatter)
-    # TO CHANGE
-    ax.set_ylim(-0.02, 1.02)
-    # if np.max(y_np) < 0.6:
-    #     ax.set_ylim(-0.02, 0.62)
-    # elif np.max(y_np) < 0.8:
-    #     ax.set_ylim(-0.02, 0.82)
 
-    # ax.yaxis.set_major_formatter(ticker.ScalarFormatter())  # set regular formatting
+    # 成功率/碰撞率指标都约束在 [0, 1]，这里直接固定 y 轴范围方便不同 ablation 组横向对比。
+    ax.set_ylim(-0.02, 1.02)
 
     coeff = params.get('coeff', 1.0)
     y_np *= coeff
@@ -398,19 +345,14 @@ def plot(index, interpolated_key, ax, set_xlabel, legend_name, group_id, set_y_s
         y_plus_std = np.maximum(y_plus_std, clip_min)
         y_minus_std = np.maximum(y_minus_std, clip_min)
 
-    # `mkfunc` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
     def mkfunc(x, pos):
         if x >= 1e9:
-            # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
             return '%dB' % int(x * 1e-9)
         elif x >= 1e6:
-            # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
             return '%dM' % int(x * 1e-6)
         elif x >= 1e3:
-            # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
             return '%dK' % int(x * 1e-3)
         else:
-            # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
             return '%d' % int(x)
 
     mkformatter = matplotlib.ticker.FuncFormatter(mkfunc)
@@ -418,33 +360,22 @@ def plot(index, interpolated_key, ax, set_xlabel, legend_name, group_id, set_y_s
 
     ax.spines['right'].set_visible(False)
     ax.spines['top'].set_visible(False)
-    # ax.spines['left'].set_visible(False)
-
-    # ax.spines['top'].set_linewidth(0.5)
-    # ax.spines['right'].set_linewidth(0.5)
     ax.spines['left'].set_linewidth(0.6)
     ax.spines['bottom'].set_linewidth(0.6)
 
     label = params.get('label')
     if label:
         ax.set_ylabel(label, fontsize=10)
-
-        # hide tick of axis
         ax.xaxis.tick_bottom()
     ax.yaxis.tick_left()
     ax.tick_params(which='major', length=0)
-
     ax.grid(color='#B3B3B3', linestyle='-', linewidth=0.25, alpha=0.2)
-    # ax.ticklabel_format(style='plain', axis='y', scilimits=(0, 0))
 
     lw = 1.4
-
     ax.plot(x, y_mean, color=COLOR[group_id], label=legend_name, linewidth=lw, antialiased=True)
     ax.fill_between(x, y_minus_std, y_plus_std, color=COLOR[group_id], alpha=0.25)
-    # ax.legend(prop={'size': 6}, loc='lower right')
 
 
-# `hide_tick_spine` 封装了当前模块中的一段独立流程，阅读时应重点关注它消费哪些状态、又把结果交给谁继续使用。
 def hide_tick_spine(ax):
     ax.spines['right'].set_visible(False)
     ax.spines['top'].set_visible(False)
@@ -452,14 +383,15 @@ def hide_tick_spine(ax):
     ax.tick_params(labelcolor='w', top=False, bottom=False, left=False, right=False)
 
 
-# 这里串起训练脚本的顶层执行顺序：注册组件、解析配置、启动 RL 主循环。
-# 如果任一步缺失，训练入口就无法把论文里的实验配置落到实际环境和模型上。
 def main():
-    # 命令行解析器先收集 Sample Factory 通用参数，再被四旋翼环境追加项目专用参数。
     parser = argparse.ArgumentParser()
     parser.add_argument('--path', type=str, help='main path for tensorboard files', default=os.getcwd())
-    parser.add_argument('--output', type=str,
-                        help='aggregation can be saved as tensorboard file (summary) or as table (csv)', default='csv')
+    parser.add_argument(
+        '--output',
+        type=str,
+        help='aggregation can be saved as tensorboard file (summary) or as table (csv)',
+        default='csv',
+    )
 
     args = parser.parse_args()
     path = Path(args.path)
@@ -467,7 +399,7 @@ def main():
     if not path.exists():
         raise argparse.ArgumentTypeError('Parameter {} is not a valid path'.format(path))
 
-    # TO CHANGE
+    # 这里显式固定四个 ablation 子目录，说明脚本预期的输入就是论文里这四组配置。
     subpaths = sorted(os.listdir(path))
     subpaths = ['1_default_posxy', '2_change_obs_octomap', '3_add_multi_head', '4_add_replay_buffer']
     legend_name = sorted(['1. Default', '2. Change obstacle obs', '3. Introduce self attention', '4. Introduce replay'])
@@ -483,22 +415,19 @@ def main():
     if args.output not in ['summary', 'csv']:
         raise argparse.ArgumentTypeError("Parameter {} is not summary or csv".format(args.output))
 
-    # TO CHANGE
     fig, (ax1, ax2, ax3, ax4) = plt.subplots(1, 4)
     ax = (ax1, ax2, ax3, ax4)
-
 
     for i in range(len(all_experiment_dirs)):
         aggregate(path, subpaths[i], all_experiment_dirs[subpaths[i]], ax, legend_name[i], i)
 
+    # 消融实验的 legend 统一放到图上方，便于四个子图共享。
     handles, labels = ax[0].get_legend_handles_labels()
-    # TO CHANGE
     lgd = fig.legend(handles, labels, loc='upper center', ncol=4, bbox_to_anchor=(0.5, 1.07), fontsize=10)
     lgd.set_in_layout(True)
 
     plt.tight_layout(pad=1.0)
     plt.subplots_adjust(wspace=0.15, hspace=0.25)
-    # plt.margins(0, 0)
 
     save_dir = os.path.join(os.getcwd(), 'final_plots')
     if not os.path.exists(save_dir):
@@ -507,7 +436,6 @@ def main():
     figname = 'ablation.pdf'
     plt.savefig(os.path.join(save_dir, figname), format='pdf', bbox_inches='tight', pad_inches=0.01)
 
-    # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
     return 0
 
 
