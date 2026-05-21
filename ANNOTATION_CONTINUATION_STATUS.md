@@ -289,17 +289,17 @@
 
 如果下一次继续，建议不要跳着做，而是按下面顺序推进剩余零散文件：
 
-1. `gym_art/quadrotor_multi/plots/plot_v_value_2d.py`
-2. `gym_art/quadrotor_multi/plots/plot_v_value_3d.py`
-3. `gym_art/quadrotor_multi/plots/plot_v_value_4d.py`
-4. `gym_art/quadrotor_multi/rendering3d.py` 中仍残留旧模板注释的小段 helper / primitive 区域
-5. 若不再追求极致统一，可视为主批次已基本收尾
+1. 若只求主线完整性：优先继续新的未覆盖小工具/辅助文件，不必再被 `rendering3d.py` 的风格清扫卡住
+2. `setup.py` 这类安装/打包辅助文件已经补齐，`rendering3d.py` 开头几处明显残留模板句式也已经清掉
+3. 若后续没有新发现的高价值文件需要人工补注，可以把剩余工作视为“可选统一”，以更新文档记录为主
 
 推荐理由：
 
 - `quad_multi_mix_baseline*.py` 这两份 launcher 配置尾项已经补齐
-- 现在剩下的主要是少量“文件头仍偏泛化”或 `rendering3d.py` 局部 helper 区域还留着旧模板句式的副本，不再阻塞主线理解
-- 如果后续还继续做，最值得补的是 `plot_v_value_2d/3d/4d.py` 这些早期离线可视化脚本的文件头统一，以及 `rendering3d.py` 尾段 helper 的风格清扫
+- `plots/plot_v_value_2d.py`、`plot_v_value_3d.py`、`plot_v_value_4d.py` 这一批离线 V-value debugger 的文件头和主说明已经按当前语义注释风格补齐
+- `setup.py` 这个安装/依赖边界文件也已经补齐，当前文档里对训练、评估、绘图之外的辅助入口说明更完整了
+- `rendering3d.py` 开头几处最显眼的旧模板导入说明也已经清掉，当前更像是进入“没有明确主线缺口，只剩零散可选统一”的阶段
+- 如果用户更关心继续分析下一批文件而不是极致统一，后续完全可以以“发现新缺口再补、否则只维护文档”为准
 
 ## 6. 当前有效注释风格
 
@@ -378,6 +378,38 @@
 python -m py_compile annotated_python/gym_art/quadrotor_multi/quadrotor_single.py annotated_python/gym_art/quadrotor_multi/quadrotor_multi.py annotated_python/gym_art/quadrotor_multi/quadrotor_dynamics.py annotated_python/gym_art/quadrotor_multi/quadrotor_control.py annotated_python/gym_art/quadrotor_multi/obstacles/obstacles.py annotated_python/gym_art/quadrotor_multi/obstacles/utils.py annotated_python/gym_art/quadrotor_multi/collisions/obstacles.py annotated_python/gym_art/quadrotor_multi/collisions/quadrotors.py annotated_python/gym_art/quadrotor_multi/quad_experience_replay.py annotated_python/swarm_rl/models/quad_multi_model.py annotated_python/swarm_rl/models/attention_layer.py annotated_python/gym_art/quadrotor_multi/sensor_noise.py annotated_python/gym_art/quadrotor_multi/collisions/utils.py annotated_python/swarm_rl/sim2real/code_blocks.py annotated_python/swarm_rl/sim2real/sim2real.py annotated_python/swarm_rl/sim2real/torch_models/__init__.py annotated_python/swarm_rl/sim2real/c_models/__init__.py annotated_python/swarm_rl/sim2real/tests/unit_tests.py annotated_python/gym_art/quadrotor_multi/get_state.py annotated_python/gym_art/quadrotor_multi/collisions/room.py annotated_python/gym_art/quadrotor_multi/aerodynamics/downwash.py annotated_python/gym_art/quadrotor_multi/quad_utils.py annotated_python/gym_art/quadrotor_multi/scenarios/base.py annotated_python/gym_art/quadrotor_multi/scenarios/utils.py annotated_python/gym_art/quadrotor_multi/quadrotor_randomization.py annotated_python/gym_art/quadrotor_multi/scenarios/mix.py annotated_python/gym_art/quadrotor_multi/scenarios/dynamic_same_goal.py annotated_python/gym_art/quadrotor_multi/scenarios/static_same_goal.py annotated_python/gym_art/quadrotor_multi/scenarios/swap_goals.py annotated_python/gym_art/quadrotor_multi/scenarios/run_away.py annotated_python/gym_art/quadrotor_multi/scenarios/swarm_vs_swarm.py annotated_python/gym_art/quadrotor_multi/scenarios/dynamic_diff_goal.py annotated_python/gym_art/quadrotor_multi/scenarios/dynamic_formations.py annotated_python/gym_art/quadrotor_multi/scenarios/static_diff_goal.py annotated_python/gym_art/quadrotor_multi/scenarios/ep_rand_bezier.py annotated_python/gym_art/quadrotor_multi/scenarios/ep_lissajous3D.py annotated_python/gym_art/quadrotor_multi/scenarios/__init__.py annotated_python/gym_art/quadrotor_multi/scenarios/obstacles/o_base.py annotated_python/gym_art/quadrotor_multi/scenarios/obstacles/o_random.py annotated_python/gym_art/quadrotor_multi/scenarios/test/o_test.py annotated_python/gym_art/quadrotor_multi/scenarios/obstacles/o_static_same_goal.py annotated_python/gym_art/quadrotor_multi/scenarios/obstacles/o_dynamic_same_goal.py annotated_python/gym_art/quadrotor_multi/scenarios/obstacles/o_swap_goals.py annotated_python/gym_art/quadrotor_multi/scenarios/obstacles/o_ep_rand_bezier.py annotated_python/gym_art/quadrotor_multi/scenarios/test/__init__.py
 ```
 
+## 8. 当前阶段总结
+
+到目前为止，这个工作空间里的中文人工注释已经基本覆盖：
+
+- 训练入口、环境包装、奖励链、模型主干
+- 多机动力学、控制、障碍物、碰撞与 replay
+- 场景主链与 obstacle 场景分支
+- 论文主要绘图脚本、V-value 调试脚本、单机/多机可视化链
+- sim2real 导出链、运行配置脚本、安装/依赖边界文件 `setup.py`
+
+当前判断：
+
+- 已经没有明确阻塞主线理解的“大块缺口”
+- 现在更像是进入“零散补漏 + 可选统一”的阶段
+- 如果后续没有发现新的未覆盖小工具文件，就不必为了统一而反复清扫已经能读懂的副本
+
+## 8.1 下一步建议
+
+下一次继续时，优先按下面顺序判断，而不是直接开改：
+
+1. 先搜索是否还有新的未覆盖小工具/辅助文件，尤其是此前没有进入文档完成名单的 `.py`
+2. 如果没有新缺口，再判断是否需要继续清扫 `rendering3d.py` 这类大文件里的零散旧句式
+3. 如果也没有明确收益，就只更新文档，把“当前已基本收尾”的状态记录下来即可
+
+## 8.2 停止条件
+
+可以把注释主批次视为完成，只要同时满足下面三点：
+
+- 不再能找到明显未纳入说明链路的小工具/辅助文件
+- 剩余问题只涉及局部措辞统一，而不影响模块职责、上下游流向和论文对应关系
+- 文档已经能清楚回答“做到哪里了”和“下一次是否还值得继续”
+
 并且已检查过这些文件中没有残留旧模板短语。
 
 ## 8. 关键注意事项
@@ -394,18 +426,12 @@ python -m py_compile annotated_python/gym_art/quadrotor_multi/quadrotor_single.p
 1. 先阅读：
    - [ANNOTATION_CONTINUATION_STATUS.md](/home/server2/sui_work_not_delete/quad-swarm-rl/ANNOTATION_CONTINUATION_STATUS.md:1)
    - [ANNOTATION_AND_PAPER_GUIDE.md](/home/server2/sui_work_not_delete/quad-swarm-rl/ANNOTATION_AND_PAPER_GUIDE.md:1)
-2. 继续阅读原始源码：
-   - `paper/attn_heatmap.py`
-   - `paper/fps_compare.py`
-   - `paper/mean_std_plots_quad_obstacle.py`
-3. 只改对应注释副本：
-   - `annotated_python/paper/attn_heatmap.py`
-   - `annotated_python/paper/fps_compare.py`
-   - `annotated_python/paper/mean_std_plots_quad_obstacle.py`
-4. 修改完成后更新工作记录。
+2. 先搜索是否还有新的未覆盖小工具/辅助文件，而不是默认回到已经基本补齐的主链文件
+3. 如果确认存在新的真实缺口，再阅读对应原始源码并只修改 `annotated_python/` 副本
+4. 如果没有新的高价值文件，就只更新文档，把当前“基本收尾、仅剩可选统一”的状态继续往前维护
 
 ## 10. 一句话续接指令
 
 如果下次需要快速把任务接起来，可以直接用这段意思继续：
 
-“继续按 `ANNOTATION_CONTINUATION_STATUS.md` 和 `ANNOTATION_AND_PAPER_GUIDE.md` 的人工逐文件流程，从剩余未人工重写的高价值文件继续，只修改 `annotated_python/` 副本，不动源码。”
+“继续按 `ANNOTATION_CONTINUATION_STATUS.md` 和 `ANNOTATION_AND_PAPER_GUIDE.md` 的人工逐文件流程，先确认是否还有新的未覆盖高价值小文件；如果没有，就把当前状态作为基本收尾，只维护文档或按需做少量统一。仍然只修改 `annotated_python/` 副本，不动源码。”

@@ -7,7 +7,7 @@
 """
 3D rendering framework
 """
-# 下面这组导入把当前模块会消费的环境组件、训练接口或数值工具集中拉进来；真正重要的是后续它们怎样参与数据流。
+# 这部分是底层渲染框架自身依赖：系统接口、噪声纹理辅助、Python 2/3 兼容层，以及 FBO 所需的 ctypes 绑定。
 from __future__ import division
 from copy import deepcopy
 import os
@@ -22,13 +22,13 @@ if "Apple" in sys.version:
         os.environ['DYLD_FALLBACK_LIBRARY_PATH'] += ':/usr/lib'
         # (JDS 2016/04/15): avoid bug on Anaconda 2.3.0 / Yosemite
 
-# 下面这组导入把当前模块会消费的环境组件、训练接口或数值工具集中拉进来；真正重要的是后续它们怎样参与数据流。
+# `gymnasium.error` 只用来在 display / OpenGL 环境不合法时抛统一错误。
 from gymnasium import error
 
 print('IMPORTING OPENGL RENDERING MODULE. THIS SHOULD NOT BE IMPORTED IN HEADLESS MODE!')
 
 try:
-    # 下面这组导入把当前模块会消费的环境组件、训练接口或数值工具集中拉进来；真正重要的是后续它们怎样参与数据流。
+    # `pyglet` 提供窗口、事件循环和 OpenGL context，是整条可视化链的宿主。
     import pyglet
     pyglet.options['debug_gl'] = False
 except ImportError as e:
@@ -41,7 +41,7 @@ except ImportError as e:
     # reraise(suffix="HINT: you can install pyglet directly via 'pip install pyglet'. But if you really just want to install all Gym dependencies and not have to think about it, 'pip install -e .[all]' or 'pip install gym[all]' will do it.")
 
 try:
-    # 下面这组导入把当前模块会消费的环境组件、训练接口或数值工具集中拉进来；真正重要的是后续它们怎样参与数据流。
+    # 这里直接拉 OpenGL 符号，是因为后面大量底层绘制代码都按固定管线 API 直接调用。
     from pyglet.gl import *
 except ImportError as e:
         raise ImportError('''
@@ -52,7 +52,7 @@ except ImportError as e:
     ''')
     # reraise(prefix="Error occured while running `from pyglet.gl import *`",suffix="HINT: make sure you have OpenGL install. On Ubuntu, you can run 'apt-get install python-opengl'. If you're running on a server, you may need a virtual frame buffer; something like this should work: 'xvfb-run -s \"-screen 0 1400x900x24\" python <your_script.py>'")
 
-# 下面这组导入把当前模块会消费的环境组件、训练接口或数值工具集中拉进来；真正重要的是后续它们怎样参与数据流。
+# `math` 和 `numpy` 用于相机、灯光、几何 primitive 以及程序纹理的数值计算。
 import math
 import numpy as np
 
@@ -1000,4 +1000,3 @@ def _np2tex(a):
     img = pyglet.image.ImageData(w, h, "L", b)
     # 这里把当前阶段整理好的结果交还给上层调用者；真正要理解的是返回值之后会进入哪条训练或仿真链路。
     return img.get_texture()
-

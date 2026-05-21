@@ -1,20 +1,22 @@
 # 中文注释副本；原始文件：setup.py
 # 说明：为避免修改源码，本文件仅作为阅读辅助材料。
-# 该文件是项目代码库的一部分，当前副本的注释重点放在它在整体训练/仿真链路中的职责，而不是 Python 语法本身。
-
-# 下面这组导入把当前模块会消费的环境组件、训练接口或数值工具集中拉进来；真正重要的是后续它们怎样参与数据流。
+# 这个文件不参与训练时的在线计算，但它决定了整个仓库被安装成什么样子。
+# 上游是仓库根目录里的 README 与依赖清单，下游是 `pip install -e .` 之后得到的
+# `swarm_rl` 包、可导入模块以及一整套训练/评估/绘图/渲染依赖边界。
 from setuptools import setup, find_packages
 from os import path
 
 here = path.abspath(path.dirname(__file__))
 
-# Get the long description from the README file
+# 安装时把仓库 README 读成 PyPI 长描述；这不会影响运行逻辑，但会影响包分发时展示的项目说明。
 with open(path.join(here, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
-# Arguments marked as "Required" below must be included for upload to PyPI.
-# Fields marked as "Optional" may be commented out.
-
+# 这里集中固定运行依赖版本。
+# 这份列表本质上定义了项目假定的数值/渲染/强化学习软件栈：
+# - `sample-factory`、`torch` 负责训练与推理主链；
+# - `gymnasium`、`pyglet`、`noise`、`bezier` 等支撑环境与渲染；
+# - `plotly`、`matplotlib`、`pandas` 支撑论文分析与可视化。
 pip_packages = [
     'numpy==1.26.4', 'matplotlib==3.9.2', 'numba==0.60.0', 'pyglet==1.5.23', 'gym==0.26.2', 'gymnasium==0.28.1',
     'transforms3d==0.4.2', 'noise==1.2.2', 'tqdm==4.66.5', 'Cython==3.0.11', 'scipy==1.14.1',
@@ -23,6 +25,7 @@ pip_packages = [
 ]
 
 setup(
+    # 包名决定 `pip` 安装后的 import 根命名空间；这里实际导出的是整个 `swarm_rl` 训练栈。
     name='swarm_rl',  # Required
 
     version='1.0.0',  # Required
@@ -33,49 +36,24 @@ setup(
 
     long_description_content_type='text/markdown',  # Optional
 
-    # This should be a valid link to your project's main homepage.
-    #
-    # This field corresponds to the "Home-Page" metadata field:
-    # https://packaging.python.org/specifications/core-metadata/#home-page-optional
     url='https://github.com/Zhehui-Huang',  # Optional
 
-    # This should be your name or the name of the organization which owns the
-    # project.
     author='Zhehui Huang',  # Optional
 
-    # This should be a valid email address corresponding to the author listed
-    # above.
     author_email='zhehuihu@usc.edu',  # Optional
 
-    # This field adds keywords for your project which will appear on the
-    # project page. What does your project relate to?
-    #
-    # Note that this is a string of words separated by whitespace, not a list.
     keywords='Reinforcement Learning for Quadrotors',  # Optional
 
-    # You can just specify package directories manually here if your project is
-    # simple. Or you can use find_packages().
-    #
-    # Alternatively, if you just want to distribute a single Python file, use
-    # the `py_modules` argument instead as follows, which will expect a file
-    # called `my_module.py` to exist:
-    #
-    #   py_modules=["my_module"],
-    #
+    # 自动把仓库里可发现的 Python 包都纳入安装结果。
+    # 这使 `swarm_rl`、`gym_art` 等目录在 editable install 后都能被训练脚本直接导入。
     packages=find_packages(where='.'),  # Required
 
-    # Specify which Python versions you support. In contrast to the
-    # 'Programming Language' classifiers above, 'pip install' will check this
-    # and refuse to install the project if the version does not match. If you
-    # do not support Python 2, you can simplify this to '>=3.5' or similar, see
-    # https://packaging.python.org/guides/distributing-packages-using-setuptools/#python-requires
+    # Python 版本下界是环境复现的重要约束。
+    # 之前排查 conda 环境时之所以选 3.11.11，就是要满足这里的 `>=3.11.10` 要求。
     python_requires='>=3.11.10',
 
-    # This field lists other packages that your project depends on to run.
-    # Any package you put here will be installed by pip when your project is
-    # installed, so they must be valid existing projects.
-    #
-    # For an analysis of "install_requires" vs pip's requirements files see:
-    # https://packaging.python.org/en/latest/requirements.html
+    # `install_requires` 把上面的依赖边界真正交给 `pip`。
+    # 训练入口 `swarm_rl.train`、评估入口 `swarm_rl.enjoy`、论文脚本与 OpenGL 渲染链
+    # 都默认这些包在环境里已经可导入。
     install_requires=pip_packages,
 )

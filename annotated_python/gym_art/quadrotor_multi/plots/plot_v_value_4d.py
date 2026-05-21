@@ -1,15 +1,19 @@
 # 中文注释副本；原始文件：gym_art/quadrotor_multi/plots/plot_v_value_4d.py
 # 说明：为避免修改源码，本文件仅作为阅读辅助材料。
-# 该文件属于多机四旋翼仿真环境的一部分，负责环境状态、物理过程或配套工具中的某一环。
-# 它的上游通常来自场景配置、动力学状态或训练动作，下游会流向观测构造、奖励结算、碰撞处理或可视化。
-
-# 下面这组导入把当前模块会消费的环境组件、训练接口或数值工具集中拉进来；真正重要的是后续它们怎样参与数据流。
+# 这个脚本把 critic 在局部 3D 位置扰动上的 value 样本画成带颜色编码的 3D 点云。
+# 与 `plot_v_value_3d.py` 相比，它不是把 value 本身当 z 轴，
+# 而是把 `(x, y, z)` 三维坐标保留下来，再用颜色承载 value 大小，
+# 便于观察 critic 在立体邻域里更偏好哪一片空间。
 import numpy as np
 import pandas as pd
 import plotly.express as px
 
-# 下面开始文件或代码块自带的文档字符串；如果源码作者已经解释设计意图，应优先结合它理解上下文。
 """
+这里保留作者原始的 debugger 用法：
+- 固定其它观测，只扫局部 `(x, y, z)` 三维位置。
+- 采样结果是一个三层嵌套数组，最后会 flatten 成样本表。
+- 这个脚本不连训练环境，只负责把已导出的局部 value 体素云可视化出来。
+
 Check plot_v_value_2d.py for more details. But code you should use below
 
 tmp_score=[]
@@ -67,6 +71,7 @@ max_v_id = df['value'].idxmax()
 max_x, max_y, max_z, max_value = df.iloc[max_v_id]['x'], df.iloc[max_v_id]['y'], df.iloc[max_v_id]['z'], df.iloc[max_v_id]['value']
 text = "max value={:.5f}, x={:.2f}, y={:.2f}, z={:.2f}".format(max_value, max_x, max_y, max_z)
 
+# 颜色承载 value、空间轴承载真实坐标，更适合看 3D 邻域里 critic 的偏好体积。
 fig = px.scatter_3d(df, x='x', y='y', z='z', color='value', title=text)
 
 

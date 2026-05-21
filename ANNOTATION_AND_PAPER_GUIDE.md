@@ -346,13 +346,33 @@
 - `obstacles/test/unit_test.py`、`obstacles/test/speed_test.py`、`collisions/test/unit_test/obstacles.py`、`collisions/test/unit_test/quadrotor.py` 这组 obstacle / collision 验证脚本也已经补齐；下一批可以转去 collision 性能测试、`plot_v_value_1d.py` 和残余 `__init__.py`。
 - `collisions/test/speed_test/quadrotor.py`、`plots/plot_v_value_1d.py` 和当前仓库里残余的 `__init__.py` 入口文件也已经补齐；下一批更适合收掉 `quad_multi_mix_baseline*.py` 这两份 launcher 配置尾项。
 - `quad_multi_mix_baseline.py` 和 `quad_multi_mix_baseline_attn_8.py` 这两份 launcher 配置尾项也已经补齐；后续如果还继续，更像是在做少量风格统一清扫，而不是补主线缺口。
+- `plots/plot_v_value_2d.py`、`plots/plot_v_value_3d.py`、`plots/plot_v_value_4d.py` 这一批早期离线 V-value debugger 也已经按当前风格补齐，现在主线缺口基本已经转成“是否还要继续做统一清扫”的问题。
+- `setup.py` 这个安装/打包辅助文件也已经补齐，当前注释主线已经覆盖到“环境依赖怎样被固定并导出给训练脚本”这一层。
+- `rendering3d.py` 开头几处最显眼的旧模板导入说明也已经清掉；如果后面没有新发现的未覆盖小文件，后续工作就更偏文档维护和可选统一。
+
+### 7.0 当前阶段结论
+
+结合当前仓库里的副本状态和续做文档，现阶段更准确的判断是：
+
+- 主链注释工作已经基本收尾
+- 后续优先级不再是“大面积继续补主线”，而是“先检查是否还有真实缺口，再决定是否做统一清扫”
+- 如果只剩局部旧句式、而不影响阅读主线，就可以只更新文档，不必强行继续改副本
+
+### 7.0.1 后续建议
+
+如果后面还要继续，建议按这个策略执行：
+
+1. 先读 `ANNOTATION_CONTINUATION_STATUS.md` 的“当前阶段总结”和“下一步建议”
+2. 先搜索新的未覆盖小工具/辅助文件，而不是默认回到 `rendering3d.py`
+3. 只有在确认存在新的真实理解缺口时，再继续改 `annotated_python/`
+4. 如果没有新的高价值目标，就把重点放在维护文档断点和续做说明上
 
 ### 7.1 下次打开 Codex 的调用方式
 
 下次如果要无缝续做，建议直接在仓库根目录打开 Codex 后发送一条类似下面的消息：
 
 ```text
-/memories 请继续这个工作空间之前的注释工作。先读取 ANNOTATION_AND_PAPER_GUIDE.md 和 ANNOTATION_CONTINUATION_STATUS.md，按文档里记录的当前注释顺序与下一批推荐顺序继续。当前优先目标改为 `gym_art/quadrotor_multi/plots/plot_v_value_2d.py`、`plot_v_value_3d.py`、`plot_v_value_4d.py`，然后按需清扫 `rendering3d.py` 尾段仍残留旧模板句式的 helper。仍然只允许修改 annotated_python/ 和文档，不要改源码目录。
+/memories 请继续这个工作空间之前的注释工作。先读取 ANNOTATION_AND_PAPER_GUIDE.md 和 ANNOTATION_CONTINUATION_STATUS.md，确认当前主线已补到哪里。如果要继续，优先寻找新的未覆盖小工具/辅助文件；如果只剩 `rendering3d.py` 尾段 helper 这类风格统一项，可只更新文档说明是否需要继续统一。仍然只允许修改 annotated_python/ 和文档，不要改源码目录。
 ```
 
 如果想更短，也可以直接用：

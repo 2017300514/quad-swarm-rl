@@ -1,13 +1,17 @@
 # 中文注释副本；原始文件：gym_art/quadrotor_multi/plots/plot_v_value_2d.py
 # 说明：为避免修改源码，本文件仅作为阅读辅助材料。
-# 该文件属于多机四旋翼仿真环境的一部分，负责环境状态、物理过程或配套工具中的某一环。
-# 它的上游通常来自场景配置、动力学状态或训练动作，下游会流向观测构造、奖励结算、碰撞处理或可视化。
-
-# 下面这组导入把当前模块会消费的环境组件、训练接口或数值工具集中拉进来；真正重要的是后续它们怎样参与数据流。
+# 这个脚本是最轻量的离线 V-value debugger。
+# 它假定你已经在策略前向里固定了大部分观测，只沿某一个坐标轴手工扫描，
+# 然后把打印出来的 `x` / `y` 数组粘回这里，用 Plotly 快速检查 critic
+# 在这一维切片上的 value 形状，以及峰值大致落在什么位置。
 import numpy as np
 
-# 下面开始文件或代码块自带的文档字符串；如果源码作者已经解释设计意图，应优先结合它理解上下文。
 """
+这里保留作者原始的 debugger 使用说明：
+- 在 actor-critic 前向里固定其余观测，只改一个位置坐标。
+- 对这一维连续采样点逐个请求 critic value。
+- 把打印出的曲线粘回脚本，离线观察该维度上的价值峰谷。
+
 # How to use:
 1. Go to Sample-Factory, actor_critic.py: ActorCriticSeparateWeights: forward function
 2. Set a debug point at the first line of the forward function.
@@ -84,9 +88,10 @@ print(idx)
 4. Copy and paste the print info and replace v_value dict below. 
 """
 
-# 下面这组导入把当前模块会消费的环境组件、训练接口或数值工具集中拉进来；真正重要的是后续它们怎样参与数据流。
 import plotly.express as px
 
+# `x` 是手工扫过的一维坐标，`y` 是同一批观测下 critic 给出的 state value。
+# 这些静态数组只是一次离线采样结果，真正有价值的是“如何扫点并解释曲线形状”。
 x = np.array(
     [-1.0, -0.9500000000000001, -0.9, -0.8500000000000001, -0.8, -0.75, -0.7000000000000001, -0.65, -0.6000000000000001,
      -0.55, -0.5, -0.45, -0.4, -0.35000000000000003, -0.30000000000000004, -0.25, -0.2, -0.15000000000000002, -0.1,
@@ -100,5 +105,6 @@ xmax = x[np.argmax(y)]
 ymax = y.max()
 text = "max value={:.5f}, x={:.2f}".format(ymax, xmax)
 
+# 标题里直接标出当前一维切片的最大 value 及其坐标，便于肉眼定位 critic 偏好的区域。
 fig = px.scatter(x=x, y=y, title=text)
 fig.show()
